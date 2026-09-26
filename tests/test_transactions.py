@@ -5,6 +5,7 @@ import pytest
 from budget_tracker.db.category_repo import CategoryRepository
 from budget_tracker.db.connection import connect
 from budget_tracker.db.transaction_repo import TransactionRepository
+from budget_tracker.models import NO_CATEGORY
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.money import format_cents, parse_cents
 from budget_tracker.services.transactions import TransactionError, TransactionService
@@ -70,3 +71,10 @@ def test_update_delete_and_category_delete_uncategorizes(db):
 def test_rejects_invalid(db, description, amount):
     with pytest.raises(TransactionError):
         db[0].add(date(2026, 9, 1), description, amount, True, None)
+
+
+def test_filter_uncategorized(db):
+    txs, cats = db
+    txs.add(date(2026, 9, 1), "Mystery", "5", True, None)
+    txs.add(date(2026, 9, 1), "Known", "5", True, cats.list()[0].id)
+    assert [t.description for t in txs.list(category_id=NO_CATEGORY)] == ["Mystery"]

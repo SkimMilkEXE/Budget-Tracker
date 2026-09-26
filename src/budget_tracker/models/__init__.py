@@ -1,4 +1,5 @@
+from budget_tracker.models.bank_profile import BankProfile
 from budget_tracker.models.category import Category
-from budget_tracker.models.transaction import Transaction
+from budget_tracker.models.transaction import NO_CATEGORY, Transaction
 
-__all__ = ["Category", "Transaction"]
+__all__ = ["BankProfile", "Category", "NO_CATEGORY", "Transaction"]

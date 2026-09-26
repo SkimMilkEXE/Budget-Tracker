@@ -23,6 +23,19 @@ MIGRATIONS = [
     );
     CREATE INDEX idx_transactions_date ON transactions(date);
     """,
+    """
+    CREATE TABLE bank_profiles (
+        id              INTEGER PRIMARY KEY,
+        name            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        skip_rows       INTEGER NOT NULL DEFAULT 0,   -- rows above the header row
+        date_col        TEXT NOT NULL,                -- columns are stored by header name
+        description_col TEXT NOT NULL,
+        amount_col      TEXT NOT NULL DEFAULT '',     -- '' when using debit/credit
+        debit_col       TEXT NOT NULL DEFAULT '',
+        credit_col      TEXT NOT NULL DEFAULT '',
+        flip_sign       INTEGER NOT NULL DEFAULT 0
+    );
+    """,
 ]
 
 
