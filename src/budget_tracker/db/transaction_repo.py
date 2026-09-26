@@ -73,6 +73,11 @@ class TransactionRepository:
                 (tx.date.isoformat(), tx.description, tx.amount_cents, tx.category_id, tx.id),
             )
 
+    def set_categories(self, changes: list[tuple[int, int | None]]) -> None:
+        """Apply (transaction id, category id) pairs in one database transaction."""
+        with self.conn:
+            self.conn.executemany("UPDATE transactions SET category_id = ? WHERE id = ?", [(c, t) for t, c in changes])
+
     def delete(self, tx_id: int) -> None:
         with self.conn:
             self.conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))

@@ -40,12 +40,15 @@ NEW_PROFILE = "(New profile)"
 class ImportDialog(QDialog):
     """Map a CSV's columns, preview the result, then import. Every settings change re-runs the preview."""
 
-    def __init__(self, parent, service: ImportService, path: Path, rows: list[list[str]]):
+    def __init__(
+        self, parent, service: ImportService, path: Path, rows: list[list[str]], category_names: dict[int, str]
+    ):
         super().__init__(parent)
         self.setWindowTitle(f"Import {path.name}")
         self.resize(900, 600)
         self.service = service
         self.rows = rows
+        self.category_names = category_names
         self.parsed: list[ParsedRow] = []
         self.imported = 0
         self._loading = False  # true while _apply fills widgets, so each change doesn't re-preview
@@ -64,8 +67,8 @@ class ImportDialog(QDialog):
         self.profile_name.setPlaceholderText("e.g. Chase Checking (leave blank to not save)")
 
         self.summary = QLabel()
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Status", "Date", "Description", "Amount"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Status", "Date", "Description", "Category", "Amount"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -201,9 +204,10 @@ class ImportDialog(QDialog):
         self.table.setRowCount(len(self.parsed))
         for i, r in enumerate(self.parsed):
             status = {NEW: "New", DUPLICATE: "Duplicate"}.get(r.status, f"Row {r.row_number}: {r.error}")
-            cells = [status, "", "", ""]
+            cells = [status, "", "", "", ""]
             if r.tx:
-                cells[1:] = [r.tx.date.isoformat(), r.tx.description, format_cents(r.tx.amount_cents)]
+                category = self.category_names.get(r.tx.category_id, "Uncategorized")
+                cells[1:] = [r.tx.date.isoformat(), r.tx.description, category, format_cents(r.tx.amount_cents)]
             for col, text in enumerate(cells):
                 self.table.setItem(i, col, QTableWidgetItem(text))
         self.import_btn.setEnabled(any(r.status == NEW for r in self.parsed))

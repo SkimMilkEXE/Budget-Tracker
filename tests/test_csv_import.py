@@ -5,6 +5,7 @@ import pytest
 
 from budget_tracker.db.connection import connect
 from budget_tracker.db.profile_repo import ProfileRepository
+from budget_tracker.db.rule_repo import RuleRepository
 from budget_tracker.db.transaction_repo import TransactionRepository
 from budget_tracker.models import BankProfile
 from budget_tracker.services.csv_import import (
@@ -32,7 +33,7 @@ def guessed(rows):
 @pytest.fixture
 def service():
     conn = connect(":memory:")
-    return ImportService(TransactionRepository(conn), ProfileRepository(conn))
+    return ImportService(TransactionRepository(conn), ProfileRepository(conn), RuleRepository(conn))
 
 
 def test_checking_export_with_preamble_and_messy_amounts():
@@ -80,7 +81,7 @@ def test_bad_mapping_raises():
 
 def test_read_rows_handles_bom_and_cp1252(tmp_path):
     f = tmp_path / "a.csv"
-    f.write_bytes("﻿Date,Desc\n".encode("utf-8"))
+    f.write_bytes("\ufeffDate,Desc\n".encode())  # \ufeff = byte-order mark
     assert read_rows(f) == [["Date", "Desc"]]
     f.write_bytes("Date,Desc\n2026-01-01,Caf\xe9\n".encode("cp1252"))
     assert read_rows(f)[1] == ["2026-01-01", "Café"]

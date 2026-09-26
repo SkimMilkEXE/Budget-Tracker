@@ -36,6 +36,14 @@ MIGRATIONS = [
         flip_sign       INTEGER NOT NULL DEFAULT 0
     );
     """,
+    """
+    CREATE TABLE rules (
+        id          INTEGER PRIMARY KEY,
+        pattern     TEXT NOT NULL,                  -- matched case-insensitively, "contains"
+        category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        priority    INTEGER NOT NULL                -- lower runs first; first match wins
+    );
+    """,
 ]
 
 

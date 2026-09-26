@@ -90,7 +90,9 @@ class CategoriesView(QWidget):
             return
         cat_id, name = sel
         answer = QMessageBox.question(
-            self, "Delete category", f'Delete "{name}"? Its transactions will become uncategorized.'
+            self,
+            "Delete category",
+            f'Delete "{name}"? Its transactions will become uncategorized and its rules will be deleted.',
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.service.delete(cat_id)

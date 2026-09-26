@@ -1,3 +1,5 @@
+from __future__ import annotations  # our list() method shadows the builtin inside the class body
+
 import sqlite3
 
 from budget_tracker.models import Category

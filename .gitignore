@@ -1,14 +1,26 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Tool caches
 .pytest_cache/
+.ruff_cache/
+
+# PyInstaller output
 build/
 dist/
 *.spec
+
+# Personal data: never commit a real database or bank export.
+# Fake sample CSVs for tests and demos live in tests/fixtures/ and are allowed.
 *.db
 *.sqlite
-# never commit real bank data; fake samples live in tests/fixtures/
 *.csv
 !tests/fixtures/*.csv
+
+# Local notes for Claude Code
 CLAUDE.md
-*.egg-info/

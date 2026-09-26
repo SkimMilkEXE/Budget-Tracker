@@ -8,9 +8,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 from budget_tracker.db.profile_repo import ProfileRepository
+from budget_tracker.db.rule_repo import RuleRepository
 from budget_tracker.db.transaction_repo import TransactionRepository
 from budget_tracker.models import BankProfile, Transaction
 from budget_tracker.services.money import parse_cents
+from budget_tracker.services.rules import match
 
 NEW, DUPLICATE, ERROR = "new", "duplicate", "error"
 
@@ -122,12 +124,17 @@ def mark_duplicates(parsed: list[ParsedRow], existing: list[tuple[date, str, int
 
 
 class ImportService:
-    def __init__(self, transactions: TransactionRepository, profiles: ProfileRepository):
+    def __init__(self, transactions: TransactionRepository, profiles: ProfileRepository, rules: RuleRepository):
         self.transactions = transactions
+        self.rules = rules
         self.profiles = profiles
 
     def preview(self, rows: list[list[str]], profile: BankProfile) -> list[ParsedRow]:
         parsed = parse(rows, profile)
+        rules = self.rules.list()
+        for r in parsed:
+            if r.tx:
+                r.tx = replace(r.tx, category_id=match(rules, r.tx.description))
         dates = [r.tx.date for r in parsed if r.tx]
         if dates:
             mark_duplicates(parsed, self.transactions.keys_between(min(dates), max(dates)))
