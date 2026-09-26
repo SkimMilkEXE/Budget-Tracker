@@ -89,7 +89,9 @@ class CategoriesView(QWidget):
         if not (sel := self.selected()):
             return
         cat_id, name = sel
-        answer = QMessageBox.question(self, "Delete category", f'Delete "{name}"?')
+        answer = QMessageBox.question(
+            self, "Delete category", f'Delete "{name}"? Its transactions will become uncategorized.'
+        )
         if answer == QMessageBox.StandardButton.Yes:
             self.service.delete(cat_id)
             self.refresh()
