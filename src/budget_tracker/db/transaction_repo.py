@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import replace
 from datetime import date
 
-from budget_tracker.models import Transaction
+from budget_tracker.models import NO_CATEGORY, Transaction
 
 _COLUMNS = "id, date, description, amount_cents, category_id"
 
@@ -24,7 +24,9 @@ class TransactionRepository:
         if month:
             where.append("substr(date, 1, 7) = ?")
             params.append(month)
-        if category_id is not None:
+        if category_id == NO_CATEGORY:
+            where.append("category_id IS NULL")
+        elif category_id is not None:
             where.append("category_id = ?")
             params.append(category_id)
         if search:
@@ -48,6 +50,21 @@ class TransactionRepository:
                 (tx.date.isoformat(), tx.description, tx.amount_cents, tx.category_id),
             )
         return replace(tx, id=cur.lastrowid)
+
+    def add_many(self, txs: list[Transaction]) -> None:
+        with self.conn:  # one database transaction: all rows are saved, or none
+            self.conn.executemany(
+                "INSERT INTO transactions (date, description, amount_cents, category_id) VALUES (?, ?, ?, ?)",
+                [(t.date.isoformat(), t.description, t.amount_cents, t.category_id) for t in txs],
+            )
+
+    def keys_between(self, start: date, end: date) -> list[tuple[date, str, int]]:
+        """(date, description, amount_cents) of every transaction in [start, end], for duplicate checks."""
+        rows = self.conn.execute(
+            "SELECT date, description, amount_cents FROM transactions WHERE date BETWEEN ? AND ?",
+            (start.isoformat(), end.isoformat()),
+        )
+        return [(date.fromisoformat(d), desc, cents) for d, desc, cents in rows]
 
     def update(self, tx: Transaction) -> None:
         with self.conn:

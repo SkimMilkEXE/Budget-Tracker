@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import date
 
+NO_CATEGORY = 0  # category filter value meaning "uncategorized" (real ids start at 1)
+
 
 @dataclass(frozen=True)
 class Transaction:

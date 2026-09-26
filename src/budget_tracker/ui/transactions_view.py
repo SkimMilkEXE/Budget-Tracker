@@ -1,4 +1,4 @@
-from datetime import date
+from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, QSortFilterProxyModel, Qt
 from PySide6.QtWidgets import (
@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -18,10 +19,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from budget_tracker.models import Transaction
+from budget_tracker.models import NO_CATEGORY, Transaction
 from budget_tracker.services.categories import CategoryService
+from budget_tracker.services.csv_import import ImportService, read_rows
 from budget_tracker.services.money import format_cents
 from budget_tracker.services.transactions import TransactionError, TransactionService
+from budget_tracker.ui.import_dialog import ImportDialog
 
 UNCATEGORIZED = "Uncategorized"
 
@@ -124,10 +127,11 @@ class TransactionDialog(QDialog):
 
 
 class TransactionsView(QWidget):
-    def __init__(self, transactions: TransactionService, categories: CategoryService):
+    def __init__(self, transactions: TransactionService, categories: CategoryService, importer: ImportService):
         super().__init__()
         self.transactions = transactions
         self.categories = categories
+        self.importer = importer
 
         # Filter bar
         self.month = QComboBox()
@@ -143,6 +147,8 @@ class TransactionsView(QWidget):
         self.edit_btn = QPushButton("Edit…")
         self.delete_btn = QPushButton("Delete")
         add_btn.clicked.connect(self.add)
+        import_btn = QPushButton("Import CSV…")
+        import_btn.clicked.connect(self.import_csv)
         self.edit_btn.clicked.connect(self.edit)
         self.delete_btn.clicked.connect(self.delete)
 
@@ -164,7 +170,7 @@ class TransactionsView(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.update_buttons)
 
         bar = QHBoxLayout()
-        for w in (add_btn, self.edit_btn, self.delete_btn):
+        for w in (import_btn, add_btn, self.edit_btn, self.delete_btn):
             bar.addWidget(w)
         bar.addStretch()
         bar.addWidget(self.month)
@@ -181,7 +187,8 @@ class TransactionsView(QWidget):
         """Reload filter choices (categories/months may have changed) and the table."""
         self._category_list = self.categories.list()
         _refill(self.month, "All months", [(m, m) for m in self.transactions.months()])
-        _refill(self.category, "All categories", [(c.name, c.id) for c in self._category_list])
+        categories = [(UNCATEGORIZED, NO_CATEGORY)] + [(c.name, c.id) for c in self._category_list]
+        _refill(self.category, "All categories", categories)
         self.reload_table()
 
     def reload_table(self) -> None:
@@ -199,6 +206,20 @@ class TransactionsView(QWidget):
         if not rows:
             return None
         return self.model.rows[self.proxy.mapToSource(rows[0]).row()]  # proxy row != model row once sorted
+
+    def import_csv(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Import bank CSV", "", "CSV files (*.csv);;All files (*)")
+        if not path:
+            return
+        try:
+            rows = read_rows(path)
+        except OSError as e:
+            QMessageBox.warning(self, "Can't open file", str(e))
+            return
+        dialog = ImportDialog(self, self.importer, Path(path), rows)
+        if dialog.exec():
+            self.refresh()
+            QMessageBox.information(self, "Import complete", f"Imported {dialog.imported} transactions.")
 
     def add(self) -> None:
         if TransactionDialog(self, "Add transaction", self._category_list, self.transactions.add).exec():
