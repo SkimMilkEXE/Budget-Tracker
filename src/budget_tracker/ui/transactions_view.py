@@ -25,6 +25,7 @@ from budget_tracker.services.csv_import import ImportService, read_rows
 from budget_tracker.services.money import format_cents
 from budget_tracker.services.rules import RuleService, suggest_pattern
 from budget_tracker.services.transactions import TransactionError, TransactionService
+from budget_tracker.ui.colors import amount_color
 from budget_tracker.ui.import_dialog import ImportDialog
 from budget_tracker.ui.rules_view import RuleDialog
 
@@ -67,6 +68,8 @@ class TransactionTableModel(QAbstractTableModel):
             return [tx.date.isoformat(), tx.description, category, format_cents(tx.amount_cents)][col]
         if role == Qt.ItemDataRole.UserRole:
             return [tx.date.isoformat(), tx.description.lower(), category.lower(), tx.amount_cents][col]
+        if role == Qt.ItemDataRole.ForegroundRole and col == 3:
+            return amount_color(tx.amount_cents)
         if role == Qt.ItemDataRole.TextAlignmentRole and col == 3:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         return None

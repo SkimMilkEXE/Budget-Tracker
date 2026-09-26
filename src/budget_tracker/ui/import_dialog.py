@@ -33,6 +33,7 @@ from budget_tracker.services.csv_import import (
     header_of,
 )
 from budget_tracker.services.money import format_cents
+from budget_tracker.ui.colors import amount_color
 
 NEW_PROFILE = "(New profile)"
 
@@ -210,6 +211,8 @@ class ImportDialog(QDialog):
                 cells[1:] = [r.tx.date.isoformat(), r.tx.description, category, format_cents(r.tx.amount_cents)]
             for col, text in enumerate(cells):
                 self.table.setItem(i, col, QTableWidgetItem(text))
+            if r.tx:
+                self.table.item(i, 4).setForeground(amount_color(r.tx.amount_cents))
         self.import_btn.setEnabled(any(r.status == NEW for r in self.parsed))
 
     def accept(self):

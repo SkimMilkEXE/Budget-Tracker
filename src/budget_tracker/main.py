@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from budget_tracker.db.category_repo import CategoryRepository
@@ -15,10 +16,20 @@ from budget_tracker.services.rules import RuleService
 from budget_tracker.services.transactions import TransactionService
 from budget_tracker.ui.main_window import MainWindow
 
+ASSETS = Path(__file__).parent / "assets"
+
 
 def main() -> int:
+    if sys.platform == "win32":
+        # Give the app its own taskbar identity; otherwise Windows groups it under python.exe
+        # and shows Python's icon instead of ours.
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("BudgetTracker")
+
     app = QApplication(sys.argv)
     app.setApplicationName("BudgetTracker")  # AppDataLocation is derived from this
+    app.setWindowIcon(QIcon(str(ASSETS / "budget-icon.ico")))  # every window and dialog inherits it
 
     data_dir = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
     data_dir.mkdir(parents=True, exist_ok=True)
