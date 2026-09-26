@@ -85,8 +85,16 @@ class RulesView(QWidget):
         buttons.addStretch()
         buttons.addWidget(rerun_btn)
 
-        hint = QLabel("Rules are tried from the top; the first one that matches a description sets its category.")
-        hint.setWordWrap(True)
+        hint = QLabel(
+            "Rules sort transactions into categories automatically. A rule like "
+            '<b>"NETFLIX" → Subscriptions</b> puts any transaction whose description contains '
+            '"netflix" (any capitalization) into Subscriptions.<br><br>'
+            "Rules run on every CSV import. They're checked from the top and the <b>first match wins</b>, "
+            'so put specific rules ("AMAZON PRIME") above general ones ("AMAZON"). '
+            "When you categorize a transaction by hand you'll be offered a rule for it, and "
+            "<b>Re-run rules</b> applies them to transactions you've already imported."
+        )
+        hint.setWordWrap(True)  # QLabel treats text containing tags as rich text
 
         layout = QVBoxLayout(self)
         layout.addLayout(buttons)
