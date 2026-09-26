@@ -11,3 +11,4 @@ dist/
 *.csv
 !tests/fixtures/*.csv
 CLAUDE.md
+*.egg-info/
