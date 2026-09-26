@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.spec
+*.db
+*.sqlite
+# never commit real bank data; fake samples live in tests/fixtures/
+*.csv
+!tests/fixtures/*.csv
+CLAUDE.md
