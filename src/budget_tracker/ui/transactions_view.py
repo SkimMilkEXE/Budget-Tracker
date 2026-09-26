@@ -23,8 +23,10 @@ from budget_tracker.models import NO_CATEGORY, Transaction
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService, read_rows
 from budget_tracker.services.money import format_cents
+from budget_tracker.services.rules import RuleService, suggest_pattern
 from budget_tracker.services.transactions import TransactionError, TransactionService
 from budget_tracker.ui.import_dialog import ImportDialog
+from budget_tracker.ui.rules_view import RuleDialog
 
 UNCATEGORIZED = "Uncategorized"
 
@@ -127,11 +129,14 @@ class TransactionDialog(QDialog):
 
 
 class TransactionsView(QWidget):
-    def __init__(self, transactions: TransactionService, categories: CategoryService, importer: ImportService):
+    def __init__(
+        self, transactions: TransactionService, categories: CategoryService, importer: ImportService, rules: RuleService
+    ):
         super().__init__()
         self.transactions = transactions
         self.categories = categories
         self.importer = importer
+        self.rules = rules
 
         # Filter bar
         self.month = QComboBox()
@@ -143,12 +148,13 @@ class TransactionsView(QWidget):
         self.category.currentIndexChanged.connect(self.reload_table)
         self.search.textChanged.connect(self.reload_table)
 
+        # Action buttons
+        import_btn = QPushButton("Import CSV…")
         add_btn = QPushButton("Add…")
         self.edit_btn = QPushButton("Edit…")
         self.delete_btn = QPushButton("Delete")
-        add_btn.clicked.connect(self.add)
-        import_btn = QPushButton("Import CSV…")
         import_btn.clicked.connect(self.import_csv)
+        add_btn.clicked.connect(self.add)
         self.edit_btn.clicked.connect(self.edit)
         self.delete_btn.clicked.connect(self.delete)
 
@@ -216,24 +222,54 @@ class TransactionsView(QWidget):
         except OSError as e:
             QMessageBox.warning(self, "Can't open file", str(e))
             return
-        dialog = ImportDialog(self, self.importer, Path(path), rows)
+        names = {c.id: c.name for c in self._category_list}
+        dialog = ImportDialog(self, self.importer, Path(path), rows, names)
         if dialog.exec():
             self.refresh()
             QMessageBox.information(self, "Import complete", f"Imported {dialog.imported} transactions.")
 
     def add(self) -> None:
-        if TransactionDialog(self, "Add transaction", self._category_list, self.transactions.add).exec():
+        saved = {}
+
+        def save(**values):
+            self.transactions.add(**values)
+            saved.update(values)
+
+        if TransactionDialog(self, "Add transaction", self._category_list, save).exec():
             self.refresh()
+            self._offer_rule(saved["description"], saved["category_id"])
 
     def edit(self) -> None:
         if not (tx := self.selected()):
             return
+        saved = {}
 
         def save(**values):
             self.transactions.update(tx.id, **values)
+            saved.update(values)
 
         if TransactionDialog(self, "Edit transaction", self._category_list, save, tx).exec():
             self.refresh()
+            if saved["category_id"] != tx.category_id:
+                self._offer_rule(saved["description"], saved["category_id"])
+
+    def _offer_rule(self, description: str, category_id: int | None) -> None:
+        """After a manual categorize, offer a rule so similar transactions get it automatically.
+        Skipped when the rules would already pick this category."""
+        if category_id is None or self.rules.categorize(description) == category_id:
+            return
+        note = (
+            f'Create a rule so transactions like "{description}" get this category automatically? '
+            "Edit the text to match on, or Cancel to skip."
+        )
+        dialog = RuleDialog(
+            self, "Create a rule?", self._category_list, self.rules.add, suggest_pattern(description), category_id, note
+        )
+        if dialog.exec():
+            changed = self.rules.rerun()  # fill in other uncategorized transactions it matches
+            self.refresh()
+            if changed:
+                QMessageBox.information(self, "Rule created", f"Also categorized {changed} other transactions.")
 
     def delete(self) -> None:
         if not (tx := self.selected()):
