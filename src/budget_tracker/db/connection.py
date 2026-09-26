@@ -13,6 +13,16 @@ MIGRATIONS = [
         ('Groceries'), ('Dining'), ('Rent'), ('Utilities'),
         ('Transport'), ('Entertainment'), ('Subscriptions'), ('Income');
     """,
+    """
+    CREATE TABLE transactions (
+        id           INTEGER PRIMARY KEY,
+        date         TEXT NOT NULL,              -- YYYY-MM-DD
+        description  TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,           -- negative = expense, positive = income
+        category_id  INTEGER REFERENCES categories(id) ON DELETE SET NULL
+    );
+    CREATE INDEX idx_transactions_date ON transactions(date);
+    """,
 ]
 
 
