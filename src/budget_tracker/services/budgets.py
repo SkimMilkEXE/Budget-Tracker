@@ -5,6 +5,7 @@ from budget_tracker.db.budget_repo import BudgetRepository
 from budget_tracker.db.category_repo import CategoryRepository
 from budget_tracker.db.transaction_repo import TransactionRepository
 from budget_tracker.services.money import parse_cents
+from budget_tracker.services.reports import picker_months
 
 NEAR_LIMIT = 0.8  # at or above this fraction of the limit counts as "near"
 OK, NEAR, OVER = "ok", "near", "over"
@@ -54,9 +55,7 @@ class BudgetService:
         ]
 
     def months(self, today: date | None = None) -> list[str]:
-        """Months to offer in the picker, newest first: every month with transactions, plus this one."""
-        current = (today or date.today()).strftime("%Y-%m")
-        return sorted(set(self.transactions.months()) | {current}, reverse=True)
+        return picker_months(self.transactions, today)
 
     def set_limit(self, category_id: int | None, amount: str) -> None:
         if category_id is None:

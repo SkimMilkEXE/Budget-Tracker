@@ -7,10 +7,12 @@ from PySide6.QtWidgets import QLabel, QMainWindow, QMenu, QTabWidget, QToolButto
 from budget_tracker.services.budgets import BudgetService
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService
+from budget_tracker.services.reports import ReportService
 from budget_tracker.services.rules import RuleService
 from budget_tracker.services.transactions import TransactionService
 from budget_tracker.ui.budgets_view import BudgetsView
 from budget_tracker.ui.categories_view import CategoriesView
+from budget_tracker.ui.charts_view import ChartsView
 from budget_tracker.ui.rules_view import RulesView
 from budget_tracker.ui.settings import DATE_FORMATS, MONTH_FORMATS, app_settings
 from budget_tracker.ui.transactions_view import TransactionsView
@@ -27,16 +29,18 @@ class MainWindow(QMainWindow):
         importer: ImportService,
         rules: RuleService,
         budgets: BudgetService,
+        reports: ReportService,
     ):
         super().__init__()
         self.setWindowTitle("Budget Tracker")
         self.resize(900, 600)
         self.settings = app_settings()
 
-        # One tab per feature; later milestones add Charts...
+        # One tab per feature.
         self.tabs = tabs = QTabWidget()
         tabs.addTab(TransactionsView(transactions, categories, importer, rules), "Transactions")
         tabs.addTab(BudgetsView(budgets, categories), "Budgets")
+        tabs.addTab(ChartsView(reports), "Charts")
         tabs.addTab(RulesView(rules, categories), "Rules")
         tabs.addTab(CategoriesView(categories), "Categories")
         # Each view reloads when shown, so edits made in one tab appear in the others.

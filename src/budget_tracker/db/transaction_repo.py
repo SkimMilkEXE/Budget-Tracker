@@ -52,6 +52,28 @@ class TransactionRepository:
         )
         return dict(rows)
 
+    def expenses_by_category(self, month: str) -> dict[int | None, int]:
+        """category id (None = uncategorized) -> total expenses in cents for "YYYY-MM".
+        Expenses only: income and refunds don't offset it."""
+        rows = self.conn.execute(
+            "SELECT category_id, -SUM(amount_cents) FROM transactions "
+            "WHERE substr(date, 1, 7) = ? AND amount_cents < 0 GROUP BY category_id",
+            (month,),
+        )
+        return dict(rows)
+
+    def monthly_totals(self, first: str, last: str) -> dict[str, tuple[int, int]]:
+        """ "YYYY-MM" -> (income, expenses) in cents, both positive, for months in [first, last]
+        that have transactions."""
+        rows = self.conn.execute(
+            "SELECT substr(date, 1, 7) AS m, "
+            "SUM(CASE WHEN amount_cents > 0 THEN amount_cents ELSE 0 END), "
+            "SUM(CASE WHEN amount_cents < 0 THEN -amount_cents ELSE 0 END) "
+            "FROM transactions WHERE m BETWEEN ? AND ? GROUP BY m",
+            (first, last),
+        )
+        return {m: (income, expenses) for m, income, expenses in rows}
+
     def add(self, tx: Transaction) -> Transaction:
         with self.conn:
             cur = self.conn.execute(
