@@ -130,7 +130,7 @@ def test_settings_menu_changes_formats_and_theme(window):
     submenu = {a.text().replace("&", ""): a.menu() for a in menu.actions() if a.menu()}
     assert set(submenu) == {"Theme", "Month format", "Date format"}
     actions = [a.text().replace("&", "") for a in menu.actions() if not a.menu() and not a.isSeparator()]
-    assert actions == ["Back up data…", "Restore from backup…", "Explore demo data"]
+    assert actions == ["Back up data…", "Restore from backup…", "Explore demo data", "About SkimWise"]
 
     next(a for a in submenu["Date format"].actions() if a.text() == "Aug 31, 2026").trigger()
     view = window.tabs.currentWidget()
@@ -246,3 +246,13 @@ def test_redetect_button_asks_then_restores_dismissed(window, asked):
     asked.answer = QMessageBox.StandardButton.Yes
     subs.redetect()
     assert subs.suggestions.rowCount() == detected and not subs.redetect_btn.isEnabled()
+
+
+def test_about_shows_version_and_data_folder(window, monkeypatch):
+    from budget_tracker import __version__
+
+    shown = []
+    monkeypatch.setattr(QMessageBox, "about", lambda _parent, title, text: shown.append((title, text)))
+    window.show_about()
+    title, text = shown[0]
+    assert title == "About SkimWise" and f"SkimWise {__version__}" in text and "stored on this PC" in text
