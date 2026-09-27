@@ -14,6 +14,7 @@ from budget_tracker.db.transaction_repo import TransactionRepository
 from budget_tracker.services.budgets import BudgetService
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService
+from budget_tracker.services.reports import ReportService
 from budget_tracker.services.rules import RuleService
 from budget_tracker.services.transactions import TransactionService
 from budget_tracker.ui.main_window import MainWindow
@@ -44,6 +45,7 @@ def main() -> int:
         ImportService(tx_repo, ProfileRepository(conn), rule_repo),
         RuleService(rule_repo, tx_repo),
         BudgetService(BudgetRepository(conn), tx_repo, cat_repo),
+        ReportService(tx_repo, cat_repo),
     )
     window.show()
     return app.exec()  # Qt's event loop; returns when the last window closes
