@@ -26,7 +26,3 @@ class ProfileRepository:
                 [getattr(p, f) for f in _FIELDS],
             ).fetchone()
         return replace(p, id=row[0])
-
-    def delete(self, profile_id: int) -> None:
-        with self.conn:
-            self.conn.execute("DELETE FROM bank_profiles WHERE id = ?", (profile_id,))

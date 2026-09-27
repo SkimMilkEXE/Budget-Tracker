@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from budget_tracker.models import NO_CATEGORY, Transaction
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService, read_rows
-from budget_tracker.services.money import format_cents
+from budget_tracker.services.money import count, format_cents
 from budget_tracker.services.rules import RuleService, suggest_pattern
 from budget_tracker.services.transactions import TransactionError, TransactionService
 from budget_tracker.ui.colors import amount_color
@@ -231,7 +231,7 @@ class TransactionsView(QWidget):
         dialog = ImportDialog(self, self.importer, Path(path), rows, names)
         if dialog.exec():
             self.refresh()
-            QMessageBox.information(self, "Import complete", f"Imported {dialog.imported} transactions.")
+            QMessageBox.information(self, "Import complete", f"Imported {count(dialog.imported, 'transaction')}.")
 
     def add(self) -> None:
         saved = {}
@@ -274,7 +274,9 @@ class TransactionsView(QWidget):
             changed = self.rules.rerun()  # fill in other uncategorized transactions it matches
             self.refresh()
             if changed:
-                QMessageBox.information(self, "Rule created", f"Also categorized {changed} other transactions.")
+                QMessageBox.information(
+                    self, "Rule created", f"Also categorized {count(changed, 'other transaction')}."
+                )
 
     def delete(self) -> None:
         if not (tx := self.selected()):

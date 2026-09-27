@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from budget_tracker.models import Category, Rule
 from budget_tracker.services.categories import CategoryService
+from budget_tracker.services.money import count
 from budget_tracker.services.rules import RuleError, RuleService
 
 
@@ -172,4 +173,4 @@ class RulesView(QWidget):
         box.exec()
         if box.clickedButton() in (uncategorized, everything):
             changed = self.rules.rerun(overwrite=box.clickedButton() is everything)
-            QMessageBox.information(self, "Re-run rules", f"Updated {changed} transactions.")
+            QMessageBox.information(self, "Re-run rules", f"Updated {count(changed, 'transaction')}.")

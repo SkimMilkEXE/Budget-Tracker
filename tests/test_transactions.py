@@ -13,7 +13,25 @@ from budget_tracker.services.transactions import TransactionError, TransactionSe
 
 @pytest.mark.parametrize(
     "text, cents",
-    [("12.5", 1250), ("$1,234.56", 123456), ("-3", -300), ("(5.00)", -500), (" 0.01 ", 1)],
+    [
+        ("12.5", 1250),
+        ("$1,234.56", 123456),
+        ("-3", -300),
+        ("(5.00)", -500),
+        (" 0.01 ", 1),
+        ("1,234", 123400),  # US thousands separator, not a decimal
+        ("12,50", 1250),  # decimal comma (European)
+        ("-4,5", -450),
+        ("1.234,56", 123456),  # European thousands + decimal comma
+        ("€12,50", 1250),
+        ("£8", 800),
+        ("5.00-", -500),  # trailing minus
+        ("5.00 DR", -500),  # debit
+        ("5.00CR", 500),  # credit
+        ("1 234,56", 123456),  # space as thousands separator
+        ("-5.00 DR", -500),  # two negative markers still mean negative, never positive
+        ("(-5.00)", -500),
+    ],
 )
 def test_parse_cents(text, cents):
     assert parse_cents(text) == cents
