@@ -138,3 +138,33 @@ def test_demo_database_is_separate(tmp_path):
     real = build_services(connect(tmp_path / "budget.db"))
     demo_connection()
     assert real.transactions.list() == []
+
+
+def test_restore_refuses_the_live_database_instead_of_freezing(tmp_path):
+    live = tmp_path / "budget.db"
+    services = build_services(connect(live))
+    add(services, "Precious", "10")
+    with pytest.raises(BackupError, match="different file"):
+        services.backup.restore_from(live)
+    assert [t.description for t in services.transactions.list()] == ["Precious"]
+
+
+def test_failed_backup_keeps_the_previous_backup(services, tmp_path, monkeypatch):
+    backup = tmp_path / "backup.db"
+    add(services, "First", "10")
+    services.backup.backup_to(backup)
+    before = backup.read_bytes()
+
+    def broken(*_):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(sqlite3, "connect", broken)  # simulate the write failing midway
+    with pytest.raises(BackupError, match="Couldn't save"):
+        services.backup.backup_to(backup)
+    assert backup.read_bytes() == before  # the old backup is untouched
+    assert not (tmp_path / "backup.db.partial").exists()
+
+
+def test_backup_to_unwritable_place_is_a_clear_error(services, tmp_path):
+    with pytest.raises(BackupError, match="another folder"):
+        services.backup.backup_to(tmp_path / "no such folder" / "backup.db")

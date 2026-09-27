@@ -87,14 +87,14 @@ class RecurringService:
 
     def suggestions(self) -> list[Candidate]:
         """Detected candidates the user hasn't already confirmed, added, or dismissed."""
-        known = self.recurring.known_names()
+        known = self.recurring.known_merchants()
         return [c for c in detect(self.transactions.list()) if c.name.upper() not in known]
 
     def confirm(self, c: Candidate) -> None:
-        self.recurring.add(c.name, c.amount_cents, c.frequency)
+        self.recurring.add(c.name, c.amount_cents, c.frequency, merchant=c.name)
 
     def dismiss(self, c: Candidate) -> None:
-        self.recurring.add(c.name, c.amount_cents, c.frequency, dismissed=True)
+        self.recurring.add(c.name, c.amount_cents, c.frequency, dismissed=True, merchant=c.name)
 
     def dismissed_count(self) -> int:
         return self.recurring.dismissed_count()

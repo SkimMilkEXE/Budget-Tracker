@@ -59,6 +59,11 @@ MIGRATIONS = [
         dismissed    INTEGER NOT NULL DEFAULT 0             -- 1 = "not recurring", hide from suggestions
     );
     """,
+    """
+    -- The detected merchant, kept separately so renaming an item doesn't make it get suggested again.
+    ALTER TABLE recurring_items ADD COLUMN merchant TEXT;
+    UPDATE recurring_items SET merchant = upper(name);
+    """,
 ]
 
 

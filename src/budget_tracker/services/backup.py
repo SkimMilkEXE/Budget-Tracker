@@ -1,6 +1,7 @@
 """Back up the database to a file and restore it. The app is local-only, so this is the user's only
 copy outside this PC."""
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -19,18 +20,25 @@ class BackupService:
         """Write a complete copy of the database. SQLite's backup API gives a consistent snapshot
         even while the app has the database open."""
         path = Path(path)
-        live = self.conn.execute("PRAGMA database_list").fetchone()[2]  # "" for an in-memory database
-        if live and path.resolve() == Path(live).resolve():
-            raise BackupError("Choose a different file: that's the database SkimWise is using right now.")
-        path.unlink(missing_ok=True)  # replace, never merge into, an existing file
-        dest = sqlite3.connect(path)
+        self._refuse_live_file(path)
+        # Write beside the target first and swap it in only when complete, so a failed backup
+        # never destroys an older backup with the same name.
+        temp = path.with_name(path.name + ".partial")
         try:
-            self.conn.backup(dest)
-        finally:
-            dest.close()
+            temp.unlink(missing_ok=True)
+            dest = sqlite3.connect(temp)
+            try:
+                self.conn.backup(dest)
+            finally:
+                dest.close()
+            os.replace(temp, path)
+        except (sqlite3.Error, OSError) as e:
+            temp.unlink(missing_ok=True)
+            raise BackupError(f"Couldn't save the backup there ({e}). Try another folder.") from None
 
     def restore_from(self, path: Path | str) -> None:
         """Replace ALL current data with the backup's. Older backups are upgraded to the current schema."""
+        self._refuse_live_file(Path(path))  # restoring a database onto itself waits on its own lock forever
         source = _open_backup(Path(path))
         try:
             source.backup(self.conn)  # overwrites this connection's database in place
@@ -38,6 +46,11 @@ class BackupService:
             source.close()
         self.conn.execute("PRAGMA foreign_keys = ON")
         migrate(self.conn)
+
+    def _refuse_live_file(self, path: Path) -> None:
+        live = self.conn.execute("PRAGMA database_list").fetchone()[2]  # "" for an in-memory database
+        if live and path.exists() and path.resolve() == Path(live).resolve():
+            raise BackupError("Choose a different file: that's the database SkimWise is using right now.")
 
 
 def _open_backup(path: Path) -> sqlite3.Connection:

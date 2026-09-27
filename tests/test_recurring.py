@@ -138,3 +138,25 @@ def test_redetect_brings_back_dismissed_but_keeps_confirmed(service):
     assert "NETFLIX.COM" not in suggested  # still confirmed, not re-suggested
     assert [i.name for i in service.items()] == ["NETFLIX.COM"]
     service.add("Spotify USA", "11.99", MONTHLY)  # and a formerly dismissed name can now be added by hand
+
+
+def test_renaming_a_confirmed_item_doesnt_resuggest_it(service):
+    netflix = next(c for c in service.suggestions() if c.name == "NETFLIX.COM")
+    service.confirm(netflix)
+    item = next(i for i in service.items() if i.name == "NETFLIX.COM")
+    service.update(item.id, "Netflix", "15.49", MONTHLY)
+    assert "NETFLIX.COM" not in {c.name for c in service.suggestions()}
+
+
+def test_upgrade_fills_in_merchant_for_existing_items():
+    import sqlite3
+
+    from budget_tracker.db.connection import MIGRATIONS, migrate
+
+    conn = sqlite3.connect(":memory:")
+    for i, script in enumerate(MIGRATIONS[:6], start=1):  # a database from before the merchant column
+        conn.executescript(f"BEGIN; {script} PRAGMA user_version = {i}; COMMIT;")
+    conn.execute("INSERT INTO recurring_items (name, amount_cents, frequency) VALUES ('Netflix.com', 1549, 'monthly')")
+    conn.commit()
+    migrate(conn)
+    assert RecurringRepository(conn).known_merchants() == {"NETFLIX.COM"}

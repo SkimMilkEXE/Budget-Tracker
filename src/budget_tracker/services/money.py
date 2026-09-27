@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 _CURRENCY_SYMBOLS = "$€£¥"
 _DECIMAL_COMMA = re.compile(r"-?\d+,\d{1,2}")  # "12,50": thousands groups are always 3 digits, so this is a decimal
+_THOUSANDS = re.compile(r"-?\d{1,3}(,\d{3})+(\.\d*)?")  # "1,234" / "12,345,678.90"
 
 
 def parse_cents(text: str) -> int:
@@ -30,7 +31,9 @@ def parse_cents(text: str) -> int:
         s = s.replace(",", ".")
     elif "," in s and "." in s and s.rindex(",") > s.rindex("."):  # European "1.234,56"
         s = s.replace(".", "").replace(",", ".")
-    else:
+    elif "," in s:
+        if not _THOUSANDS.fullmatch(s):  # "1,2,3" isn't a number; don't guess
+            raise ValueError(f"Not a valid amount: {text!r}")
         s = s.replace(",", "")  # US thousands separators
 
     try:
