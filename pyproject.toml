@@ -1,7 +1,7 @@
 [project]
-name = "budget-tracker"
+name = "skimwise"
 version = "0.1.0"
-description = "Private, local-only desktop budget tracker"
+description = "SkimWise: skim the fat off your spending. A private, local-only desktop budget app."
 requires-python = ">=3.12"
 dependencies = ["PySide6>=6.7"]
 
@@ -9,7 +9,7 @@ dependencies = ["PySide6>=6.7"]
 dev = ["pytest", "ruff"]
 
 [project.gui-scripts]
-budget-tracker = "budget_tracker.main:main"
+skimwise = "budget_tracker.main:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -50,6 +50,15 @@ MIGRATIONS = [
         limit_cents INTEGER NOT NULL CHECK (limit_cents > 0)   -- per month, applies to every month
     );
     """,
+    """
+    CREATE TABLE recurring_items (
+        id           INTEGER PRIMARY KEY,
+        name         TEXT NOT NULL UNIQUE COLLATE NOCASE,   -- detected items use the merchant name
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        frequency    TEXT NOT NULL CHECK (frequency IN ('monthly', 'yearly')),
+        dismissed    INTEGER NOT NULL DEFAULT 0             -- 1 = "not recurring", hide from suggestions
+    );
+    """,
 ]
 
 

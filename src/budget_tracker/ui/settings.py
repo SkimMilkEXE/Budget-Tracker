@@ -5,6 +5,9 @@ from datetime import datetime
 
 from PySide6.QtCore import QSettings
 
+APP_NAME = "SkimWise"
+TAGLINE = "Skim the fat off your spending"
+
 # key -> (menu label, strftime format)
 MONTH_FORMATS = {
     "numbers": ("Numbers (2026-09)", "%Y-%m"),
@@ -21,7 +24,7 @@ DATE_FORMATS = {
 
 def app_settings() -> QSettings:
     # Explicit names so we don't have to set an organization name, which would move the app data folder.
-    return QSettings("BudgetTracker", "BudgetTracker")
+    return QSettings(APP_NAME, APP_NAME)
 
 
 def _chosen(setting: str, options: dict, default: str) -> tuple:
