@@ -43,6 +43,15 @@ class TransactionRepository:
         rows = self.conn.execute("SELECT DISTINCT substr(date, 1, 7) FROM transactions ORDER BY 1 DESC")
         return [r[0] for r in rows]
 
+    def spending_by_category(self, month: str) -> dict[int, int]:
+        """category id -> net spending in cents for "YYYY-MM" (expenses minus refunds)."""
+        rows = self.conn.execute(
+            "SELECT category_id, -SUM(amount_cents) FROM transactions "
+            "WHERE substr(date, 1, 7) = ? AND category_id IS NOT NULL GROUP BY category_id",
+            (month,),
+        )
+        return dict(rows)
+
     def add(self, tx: Transaction) -> Transaction:
         with self.conn:
             cur = self.conn.execute(
