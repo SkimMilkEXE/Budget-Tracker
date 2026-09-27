@@ -96,6 +96,14 @@ class RecurringService:
     def dismiss(self, c: Candidate) -> None:
         self.recurring.add(c.name, c.amount_cents, c.frequency, dismissed=True)
 
+    def dismissed_count(self) -> int:
+        return self.recurring.dismissed_count()
+
+    def redetect(self) -> int:
+        """Undo every "Not recurring" so those merchants can be suggested again (if they still look
+        recurring). Confirmed items are kept. Returns how many dismissals were cleared."""
+        return self.recurring.clear_dismissed()
+
     def add(self, name: str, amount: str, frequency: str) -> None:
         self._save(None, name, amount, frequency)
 

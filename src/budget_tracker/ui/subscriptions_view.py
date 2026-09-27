@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_tracker.models import MONTHLY, YEARLY, RecurringItem
-from budget_tracker.services.money import format_cents
+from budget_tracker.services.money import count, format_cents
 from budget_tracker.services.recurring_detection import Candidate, RecurringError, RecurringService, totals
 from budget_tracker.ui.settings import date_format
 
@@ -87,8 +87,10 @@ class SubscriptionsView(QWidget):
         self.suggest_title = QLabel()
         self.confirm_btn = QPushButton("Confirm")
         self.dismiss_btn = QPushButton("Not recurring")
+        self.redetect_btn = QPushButton("Re-detect…")
         self.confirm_btn.clicked.connect(self.confirm)
         self.dismiss_btn.clicked.connect(self.dismiss)
+        self.redetect_btn.clicked.connect(self.redetect)
         self.suggestions = _table(["Merchant", "Looks like", "Last amount", "Times seen", "Last charged"])
         self.suggestions.doubleClicked.connect(self.confirm)
         self.suggestions.itemSelectionChanged.connect(self.update_buttons)
@@ -103,6 +105,7 @@ class SubscriptionsView(QWidget):
         suggest_bar.addStretch()
         suggest_bar.addWidget(self.confirm_btn)
         suggest_bar.addWidget(self.dismiss_btn)
+        suggest_bar.addWidget(self.redetect_btn)
 
         layout = QVBoxLayout(self)
         layout.addLayout(top)
@@ -137,6 +140,13 @@ class SubscriptionsView(QWidget):
                 [c.name, FREQUENCY_LABELS[c.frequency], c.amount_cents, str(c.count), c.last_date.strftime(fmt)]
                 for c in self.candidates
             ],
+        )
+        hidden = self.service.dismissed_count()
+        self.redetect_btn.setEnabled(hidden > 0)
+        self.redetect_btn.setToolTip(
+            f'Show the {count(hidden, "merchant")} you marked "Not recurring" as suggestions again.'
+            if hidden
+            else "Nothing is hidden: every detected subscription is already shown."
         )
         self.update_buttons()
 
@@ -183,6 +193,18 @@ class SubscriptionsView(QWidget):
     def dismiss(self) -> None:
         if c := self._selected(self.suggestions, self.candidates):
             self.service.dismiss(c)
+            self.refresh()
+
+    def redetect(self) -> None:
+        hidden = self.service.dismissed_count()
+        answer = QMessageBox.question(
+            self,
+            "Re-detect subscriptions",
+            f'You\'ve marked {count(hidden, "merchant")} as "Not recurring". Look for them again?\n\n'
+            "Any that still look recurring will reappear as suggestions. Your confirmed list isn't changed.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.service.redetect()
             self.refresh()
 
 

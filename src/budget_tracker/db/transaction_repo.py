@@ -109,6 +109,6 @@ class TransactionRepository:
         with self.conn:
             self.conn.executemany("UPDATE transactions SET category_id = ? WHERE id = ?", [(c, t) for t, c in changes])
 
-    def delete(self, tx_id: int) -> None:
-        with self.conn:
-            self.conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+    def delete(self, tx_ids: list[int]) -> None:
+        with self.conn:  # one database transaction: all are deleted, or none
+            self.conn.executemany("DELETE FROM transactions WHERE id = ?", [(i,) for i in tx_ids])

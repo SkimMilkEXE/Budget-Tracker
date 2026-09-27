@@ -121,3 +121,20 @@ def test_recurring_fixture_every_case():
     }
     # Deliberately absent: HULU (cancelled), CITY POWER & LIGHT (amount varies), XBOX GAME PASS
     # (missed a month), YOGA STUDIO (only two charges), PAYROLL (income), KROGER (weekly).
+
+
+def test_redetect_brings_back_dismissed_but_keeps_confirmed(service):
+    by_name = {c.name: c for c in service.suggestions()}
+    service.confirm(by_name["NETFLIX.COM"])
+    service.dismiss(by_name["SPOTIFY USA"])  # the accident
+    service.dismiss(by_name["COMCAST INTERNET"])
+    assert service.dismissed_count() == 2
+    assert "SPOTIFY USA" not in {c.name for c in service.suggestions()}
+
+    assert service.redetect() == 2
+    assert service.dismissed_count() == 0
+    suggested = {c.name for c in service.suggestions()}
+    assert {"SPOTIFY USA", "COMCAST INTERNET"} <= suggested
+    assert "NETFLIX.COM" not in suggested  # still confirmed, not re-suggested
+    assert [i.name for i in service.items()] == ["NETFLIX.COM"]
+    service.add("Spotify USA", "11.99", MONTHLY)  # and a formerly dismissed name can now be added by hand
