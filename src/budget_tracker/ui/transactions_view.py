@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -24,7 +26,7 @@ from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService, read_rows
 from budget_tracker.services.money import count, format_cents
 from budget_tracker.services.rules import RuleService, suggest_pattern
-from budget_tracker.services.transactions import TransactionError, TransactionService
+from budget_tracker.services.transactions import TransactionError, TransactionService, totals
 from budget_tracker.ui.colors import amount_color
 from budget_tracker.ui.import_dialog import ImportDialog
 from budget_tracker.ui.rules_view import RuleDialog
@@ -157,10 +159,12 @@ class TransactionsView(QWidget):
         import_btn = QPushButton("Import CSV…")
         add_btn = QPushButton("Add…")
         self.edit_btn = QPushButton("Edit…")
+        self.set_category_btn = QPushButton("Set category…")
         self.delete_btn = QPushButton("Delete")
         import_btn.clicked.connect(self.import_csv)
         add_btn.clicked.connect(self.add)
         self.edit_btn.clicked.connect(self.edit)
+        self.set_category_btn.clicked.connect(self.set_category)
         self.delete_btn.clicked.connect(self.delete)
 
         # Table: view -> proxy (sorting on header click) -> model (our data)
@@ -173,7 +177,8 @@ class TransactionsView(QWidget):
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.SortOrder.DescendingOrder)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # Ctrl+click / Shift+click select several rows for Set category or Delete.
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -181,7 +186,7 @@ class TransactionsView(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.update_buttons)
 
         bar = QHBoxLayout()
-        for w in (import_btn, add_btn, self.edit_btn, self.delete_btn):
+        for w in (import_btn, add_btn, self.edit_btn, self.set_category_btn, self.delete_btn):
             bar.addWidget(w)
         bar.addStretch()
         bar.addWidget(self.month)
@@ -191,6 +196,8 @@ class TransactionsView(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(bar)
         layout.addWidget(self.table)
+        self.summary = QLabel()  # totals for the rows the filters show
+        layout.addWidget(self.summary)
 
         self.refresh()
 
@@ -205,18 +212,33 @@ class TransactionsView(QWidget):
     def reload_table(self) -> None:
         rows = self.transactions.list(self.month.currentData(), self.category.currentData(), self.search.text())
         self.model.set_rows(rows, {c.id: c.name for c in self._category_list}, date_format())
+        t = totals(rows)
+        if t.count:
+            self.summary.setText(
+                f"{count(t.count, 'transaction')}  ·  Income {format_cents(t.income_cents)}  ·  "
+                f"Expenses {format_cents(t.expense_cents)}  ·  Net {format_cents(t.net_cents)}"
+            )
+        elif self.month.currentData() or self.category.currentData() is not None or self.search.text():
+            self.summary.setText("No transactions match these filters.")
+        else:
+            self.summary.setText("No transactions yet. Click “Import CSV…” to load your bank's export.")
         self.update_buttons()
 
     def update_buttons(self) -> None:
-        has_selection = self.selected() is not None
-        self.edit_btn.setEnabled(has_selection)
-        self.delete_btn.setEnabled(has_selection)
+        n = len(self.selected_rows())
+        self.edit_btn.setEnabled(n == 1)
+        self.set_category_btn.setEnabled(n > 0)
+        self.delete_btn.setEnabled(n > 0)
+        self.delete_btn.setText(f"Delete ({n})" if n > 1 else "Delete")
+
+    def selected_rows(self) -> list[Transaction]:
+        # proxy row != model row once sorted, so map each back to the model
+        return [self.model.rows[self.proxy.mapToSource(i).row()] for i in self.table.selectionModel().selectedRows()]
 
     def selected(self) -> Transaction | None:
-        rows = self.table.selectionModel().selectedRows()
-        if not rows:
-            return None
-        return self.model.rows[self.proxy.mapToSource(rows[0]).row()]  # proxy row != model row once sorted
+        """The selected transaction when exactly one is selected (for Edit)."""
+        rows = self.selected_rows()
+        return rows[0] if len(rows) == 1 else None
 
     def import_csv(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Import bank CSV", "", "CSV files (*.csv);;All files (*)")
@@ -278,14 +300,37 @@ class TransactionsView(QWidget):
                     self, "Rule created", f"Also categorized {count(changed, 'other transaction')}."
                 )
 
-    def delete(self) -> None:
-        if not (tx := self.selected()):
+    def set_category(self) -> None:
+        if not (txs := self.selected_rows()):
             return
-        answer = QMessageBox.question(
-            self, "Delete transaction", f'Delete "{tx.description}" ({format_cents(tx.amount_cents)})?'
+        names = [UNCATEGORIZED] + [c.name for c in self._category_list]
+        name, ok = QInputDialog.getItem(
+            self, "Set category", f"Category for {count(len(txs), 'selected transaction')}:", names, 0, False
         )
+        if ok:
+            category_id = next((c.id for c in self._category_list if c.name == name), None)
+            self.transactions.set_category([t.id for t in txs], category_id)
+            self.reload_table()
+
+    def delete(self) -> None:
+        if not (txs := self.selected_rows()):
+            return
+        if len(txs) == 1:
+            tx = txs[0]
+            title, text = "Delete transaction", f'Delete "{tx.description}" ({format_cents(tx.amount_cents)})?'
+        else:
+            first, last = min(t.date for t in txs), max(t.date for t in txs)
+            fmt = date_format()
+            title = "Delete transactions"
+            text = (
+                f"Delete {count(len(txs), 'transaction')} ({first.strftime(fmt)} to {last.strftime(fmt)}, "
+                f"totalling {format_cents(sum(t.amount_cents for t in txs))})?\n\nThis can't be undone."
+            )
+        buttons = QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        # "No" is the default so a stray Enter never deletes anything.
+        answer = QMessageBox.question(self, title, text, buttons, QMessageBox.StandardButton.No)
         if answer == QMessageBox.StandardButton.Yes:
-            self.transactions.delete(tx.id)
+            self.transactions.delete([t.id for t in txs])
             self.refresh()
 
 

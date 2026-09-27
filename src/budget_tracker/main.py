@@ -1,24 +1,14 @@
+import sqlite3
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QStandardPaths
+from PySide6.QtCore import QSettings, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from budget_tracker.db.budget_repo import BudgetRepository
-from budget_tracker.db.category_repo import CategoryRepository
 from budget_tracker.db.connection import connect
-from budget_tracker.db.profile_repo import ProfileRepository
-from budget_tracker.db.recurring_repo import RecurringRepository
-from budget_tracker.db.rule_repo import RuleRepository
-from budget_tracker.db.transaction_repo import TransactionRepository
-from budget_tracker.services.budgets import BudgetService
-from budget_tracker.services.categories import CategoryService
-from budget_tracker.services.csv_import import ImportService
-from budget_tracker.services.recurring_detection import RecurringService
-from budget_tracker.services.reports import ReportService
-from budget_tracker.services.rules import RuleService
-from budget_tracker.services.transactions import TransactionService
+from budget_tracker.services.app_services import build_services
+from budget_tracker.services.demo import demo_connection
 from budget_tracker.ui.main_window import MainWindow
 from budget_tracker.ui.settings import APP_NAME, app_settings
 
@@ -40,6 +30,32 @@ def copy_old_settings(old: QSettings, new: QSettings) -> None:
             new.setValue(key, old.value(key))
 
 
+class WindowSwitcher:
+    """Keeps one main window open and swaps it between the real data and the demo data."""
+
+    def __init__(self, real: sqlite3.Connection):
+        self.real = real
+        self.window: MainWindow | None = None
+
+    def show_real(self) -> None:
+        self._show(build_services(self.real), demo=False)
+
+    def show_demo(self) -> None:
+        self._show(build_services(demo_connection()), demo=True)  # fresh each time; discarded on exit
+
+    def _show(self, services, demo: bool) -> None:
+        old = self.window
+        self.window = MainWindow(services, demo)
+        self.window.explore_demo_requested.connect(self.show_demo)
+        self.window.exit_demo_requested.connect(self.show_real)
+        if old:
+            self.window.restoreGeometry(old.saveGeometry())  # open exactly where the old one was
+        self.window.show()  # show the new window before closing the old, or the app would quit
+        if old:
+            old.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            old.close()
+
+
 def main() -> int:
     if sys.platform == "win32":
         # Give the app its own taskbar identity; otherwise Windows groups it under python.exe
@@ -58,17 +74,11 @@ def main() -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
     conn = connect(data_dir / "budget.db")
 
-    tx_repo, rule_repo, cat_repo = TransactionRepository(conn), RuleRepository(conn), CategoryRepository(conn)
-    window = MainWindow(
-        CategoryService(cat_repo),
-        TransactionService(tx_repo),
-        ImportService(tx_repo, ProfileRepository(conn), rule_repo),
-        RuleService(rule_repo, tx_repo),
-        BudgetService(BudgetRepository(conn), tx_repo, cat_repo),
-        ReportService(tx_repo, cat_repo),
-        RecurringService(RecurringRepository(conn), tx_repo),
-    )
-    window.show()
+    switcher = WindowSwitcher(conn)
+    switcher.show_real()
+    first_launch = not app_settings().value("welcome_shown", False, type=bool)
+    if first_launch and not conn.execute("SELECT 1 FROM transactions LIMIT 1").fetchone():
+        QTimer.singleShot(0, switcher.window.show_welcome)  # once the window is on screen
     return app.exec()  # Qt's event loop; returns when the last window closes
 
 

@@ -97,7 +97,7 @@ def test_reimport_marks_duplicates_by_count(service):
     assert service.commit(again) == 0
 
     # DB has one $4.50 coffee on 08/03; a file with it twice imports exactly one more.
-    service.transactions.delete(service.transactions.list(search="starbucks")[0].id)
+    service.transactions.delete([service.transactions.list(search="starbucks")[0].id])
     statuses = [r.status for r in service.preview(rows, p) if r.tx and "STARBUCKS" in r.tx.description]
     assert sorted(statuses) == [DUPLICATE, NEW]
 

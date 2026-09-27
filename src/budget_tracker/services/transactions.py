@@ -1,5 +1,6 @@
 from __future__ import annotations  # our list() methods shadow the builtin inside class bodies
 
+from dataclasses import dataclass
 from datetime import date
 
 from budget_tracker.db.transaction_repo import TransactionRepository
@@ -29,8 +30,31 @@ class TransactionService:
     ) -> None:
         self.repo.update(_build(tx_id, when, description, amount, is_expense, category_id))
 
-    def delete(self, tx_id: int) -> None:
-        self.repo.delete(tx_id)
+    def delete(self, tx_ids: list[int]) -> None:
+        self.repo.delete(tx_ids)
+
+    def set_category(self, tx_ids: list[int], category_id: int | None) -> None:
+        """Give several transactions the same category (None = uncategorized)."""
+        self.repo.set_categories([(i, category_id) for i in tx_ids])
+
+
+@dataclass(frozen=True)
+class Totals:
+    count: int
+    income_cents: int  # positive
+    expense_cents: int  # positive
+
+    @property
+    def net_cents(self) -> int:
+        return self.income_cents - self.expense_cents
+
+
+def totals(txs: list[Transaction]) -> Totals:
+    return Totals(
+        len(txs),
+        sum(t.amount_cents for t in txs if t.amount_cents > 0),
+        -sum(t.amount_cents for t in txs if t.amount_cents < 0),
+    )
 
 
 def _build(tx_id, when, description, amount, is_expense, category_id) -> Transaction:

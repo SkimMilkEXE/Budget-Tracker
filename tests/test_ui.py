@@ -8,20 +8,9 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 import budget_tracker.ui.settings as settings
-from budget_tracker.db.budget_repo import BudgetRepository
-from budget_tracker.db.category_repo import CategoryRepository
 from budget_tracker.db.connection import connect
-from budget_tracker.db.profile_repo import ProfileRepository
-from budget_tracker.db.recurring_repo import RecurringRepository
-from budget_tracker.db.rule_repo import RuleRepository
-from budget_tracker.db.transaction_repo import TransactionRepository
-from budget_tracker.services.budgets import BudgetService
-from budget_tracker.services.categories import CategoryService
-from budget_tracker.services.csv_import import ImportService, read_rows
-from budget_tracker.services.recurring_detection import RecurringService
-from budget_tracker.services.reports import ReportService
-from budget_tracker.services.rules import RuleService
-from budget_tracker.services.transactions import TransactionService
+from budget_tracker.services.app_services import build_services
+from budget_tracker.services.csv_import import read_rows
 from budget_tracker.ui.import_dialog import ImportDialog
 from budget_tracker.ui.main_window import MainWindow
 from budget_tracker.ui.rules_view import RuleDialog
@@ -30,26 +19,33 @@ DEMO = Path(__file__).parent / "fixtures" / "demo_transactions.csv"
 
 
 @pytest.fixture
-def window(tmp_path, monkeypatch):
+def asked(monkeypatch):
+    """Records every Yes/No question the app asks; answers with asked.answer (Yes by default)."""
+
+    class Asked(list):
+        answer = QMessageBox.StandardButton.Yes
+
+    questions = Asked()
+
+    def question(_parent, title, text, *_):
+        questions.append((title, text))
+        return questions.answer
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    return questions
+
+
+@pytest.fixture
+def window(tmp_path, monkeypatch, asked):
     app = QApplication.instance() or QApplication([])
     # Never touch the real registry: every app_settings() call gets a temp .ini file instead.
     ini = str(tmp_path / "settings.ini")
     monkeypatch.setattr(settings, "QSettings", lambda *_: QSettings(ini, QSettings.Format.IniFormat))
-    # Message boxes would block waiting for a click; answer "Yes" / "OK" automatically.
+    # Message boxes would block waiting for a click; acknowledge them automatically.
     monkeypatch.setattr(QMessageBox, "information", lambda *_: QMessageBox.StandardButton.Ok)
-    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *_: QMessageBox.StandardButton.Ok)
 
-    conn = connect(":memory:")
-    tx, rules, cats = TransactionRepository(conn), RuleRepository(conn), CategoryRepository(conn)
-    w = MainWindow(
-        CategoryService(cats),
-        TransactionService(tx),
-        ImportService(tx, ProfileRepository(conn), rules),
-        RuleService(rules, tx),
-        BudgetService(BudgetRepository(conn), tx, cats),
-        ReportService(tx, cats),
-        RecurringService(RecurringRepository(conn), tx),
-    )
+    w = MainWindow(build_services(connect(":memory:")))
     w.show()
     yield w
     w.close()
@@ -131,8 +127,10 @@ def test_subscriptions_confirm(window):
 def test_settings_menu_changes_formats_and_theme(window):
     import_demo(window)
     menu = window.tabs.cornerWidget().menu()
-    submenu = {a.text().replace("&", ""): a.menu() for a in menu.actions()}
+    submenu = {a.text().replace("&", ""): a.menu() for a in menu.actions() if a.menu()}
     assert set(submenu) == {"Theme", "Month format", "Date format"}
+    actions = [a.text().replace("&", "") for a in menu.actions() if not a.menu() and not a.isSeparator()]
+    assert actions == ["Back up data…", "Restore from backup…", "Explore demo data"]
 
     next(a for a in submenu["Date format"].actions() if a.text() == "Aug 31, 2026").trigger()
     view = window.tabs.currentWidget()
@@ -147,3 +145,104 @@ def test_window_remembers_geometry(window):
     window.resize(1000, 700)
     window.close()
     assert settings.app_settings().value("geometry")
+
+
+def select_rows(view, rows):
+    from PySide6.QtCore import QItemSelectionModel
+
+    flags = QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+    view.table.clearSelection()
+    for r in rows:
+        view.table.selectionModel().select(view.proxy.index(r, 0), flags)
+
+
+def test_multi_delete_asks_first_and_no_means_no(window, asked):
+    view = import_demo(window)
+    select_rows(view, [0, 1, 2])
+    assert view.delete_btn.text() == "Delete (3)" and not view.edit_btn.isEnabled()
+
+    asked.answer = QMessageBox.StandardButton.No
+    view.delete()
+    title, text = asked[-1]
+    assert title == "Delete transactions" and "3 transactions" in text and "can't be undone" in text
+    assert view.proxy.rowCount() == 527  # nothing deleted
+
+    asked.answer = QMessageBox.StandardButton.Yes
+    view.delete()
+    assert view.proxy.rowCount() == 524
+
+
+def test_set_category_on_selection(window, monkeypatch):
+    view = import_demo(window)
+    select_rows(view, [0, 1, 2, 3])
+    chosen = [view.selected_rows()[i].id for i in range(4)]
+    monkeypatch.setattr("budget_tracker.ui.transactions_view.QInputDialog.getItem", lambda *_: ("Dining", True))
+    view.set_category()
+    dining = next(c.id for c in view._category_list if c.name == "Dining")
+    assert {t.id: t.category_id for t in view.model.rows if t.id in chosen} == dict.fromkeys(chosen, dining)
+
+
+def test_totals_line_follows_filters(window):
+    view = tab(window, "Transactions")
+    assert view.summary.text().startswith("No transactions yet")
+    import_demo(window)
+    assert view.summary.text().startswith("527 transactions  ·  Income $")
+    view.search.setText("netflix")
+    assert view.summary.text().startswith("12 transactions")  # one a month
+    view.month.setCurrentIndex(view.month.findData("2026-02"))
+    assert view.summary.text() == "1 transaction  ·  Income $0.00  ·  Expenses $15.49  ·  Net -$15.49"
+    view.search.setText("no such merchant")
+    assert view.summary.text() == "No transactions match these filters."
+
+
+def test_demo_mode_switches_windows_and_leaves_real_data_alone(window, monkeypatch):
+    from budget_tracker.main import WindowSwitcher
+
+    real = connect(":memory:")
+    switcher = WindowSwitcher(real)
+    switcher.show_real()
+    switcher.window.explore_demo_requested.emit()
+    demo_window = switcher.window
+    assert demo_window.demo and "demo data" in demo_window.windowTitle()
+    assert demo_window.transactions_view.proxy.rowCount() > 400
+    backup_action = next(a for a in demo_window.tabs.cornerWidget().menu().actions() if "Back up" in a.text())
+    assert not backup_action.isEnabled()  # no backing up demo data
+
+    demo_window.exit_demo_requested.emit()
+    assert not switcher.window.demo
+    assert real.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 0
+    switcher.window.close()
+
+
+def test_welcome_offers_demo_and_remembers_it_was_shown(window, monkeypatch):
+    def click(label):
+        monkeypatch.setattr(
+            QMessageBox, "exec", lambda box: next(b for b in box.buttons() if b.text() == label).click()
+        )
+
+    wanted_demo = []
+    window.explore_demo_requested.connect(lambda: wanted_demo.append(True))
+    click("Start empty")
+    window.show_welcome()
+    assert not wanted_demo and settings.app_settings().value("welcome_shown", type=bool)
+    click("Explore demo data")
+    window.show_welcome()
+    assert wanted_demo == [True]
+
+
+def test_redetect_button_asks_then_restores_dismissed(window, asked):
+    import_demo(window)
+    subs = tab(window, "Subscriptions")
+    assert not subs.redetect_btn.isEnabled()  # nothing hidden yet
+    detected = subs.suggestions.rowCount()
+    subs.suggestions.selectRow(0)
+    subs.dismiss()
+    assert subs.suggestions.rowCount() == detected - 1 and subs.redetect_btn.isEnabled()
+
+    asked.answer = QMessageBox.StandardButton.No
+    subs.redetect()
+    assert "1 merchant" in asked[-1][1] and subs.suggestions.rowCount() == detected - 1
+
+    asked.answer = QMessageBox.StandardButton.Yes
+    subs.redetect()
+    assert subs.suggestions.rowCount() == detected and not subs.redetect_btn.isEnabled()

@@ -1,16 +1,24 @@
 from collections.abc import Callable
+from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QActionGroup, QGuiApplication, QPalette
-from PySide6.QtWidgets import QLabel, QMainWindow, QMenu, QTabWidget, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from budget_tracker.services.budgets import BudgetService
-from budget_tracker.services.categories import CategoryService
-from budget_tracker.services.csv_import import ImportService
-from budget_tracker.services.recurring_detection import RecurringService
-from budget_tracker.services.reports import ReportService
-from budget_tracker.services.rules import RuleService
-from budget_tracker.services.transactions import TransactionService
+from budget_tracker.services.app_services import AppServices
+from budget_tracker.services.backup import BackupError
 from budget_tracker.ui.budgets_view import BudgetsView
 from budget_tracker.ui.categories_view import CategoriesView
 from budget_tracker.ui.charts_view import ChartsView
@@ -24,34 +32,34 @@ THEMES = {"System": Qt.ColorScheme.Unknown, "Light": Qt.ColorScheme.Light, "Dark
 
 
 class MainWindow(QMainWindow):
-    def __init__(
-        self,
-        categories: CategoryService,
-        transactions: TransactionService,
-        importer: ImportService,
-        rules: RuleService,
-        budgets: BudgetService,
-        reports: ReportService,
-        recurring: RecurringService,
-    ):
+    # Ask main.py to swap this window for one showing demo data, or back to the real data.
+    explore_demo_requested = Signal()
+    exit_demo_requested = Signal()
+
+    def __init__(self, services: AppServices, demo: bool = False):
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} - {TAGLINE}")
+        self.services = services
+        self.demo = demo
+        self.setWindowTitle(f"{APP_NAME} - {TAGLINE}" + ("  (demo data)" if demo else ""))
         self.settings = app_settings()
         self.resize(900, 600)
         self.restoreGeometry(self.settings.value("geometry", b""))  # last size/position, if any
 
         # One tab per feature.
         self.tabs = tabs = QTabWidget()
-        tabs.addTab(TransactionsView(transactions, categories, importer, rules), "Transactions")
-        tabs.addTab(BudgetsView(budgets, categories), "Budgets")
-        tabs.addTab(ChartsView(reports), "Charts")
-        tabs.addTab(SubscriptionsView(recurring), "Subscriptions")
-        tabs.addTab(RulesView(rules, categories), "Rules")
-        tabs.addTab(CategoriesView(categories), "Categories")
+        s = services
+        self.transactions_view = TransactionsView(s.transactions, s.categories, s.importer, s.rules)
+        tabs.addTab(self.transactions_view, "Transactions")
+        tabs.addTab(BudgetsView(s.budgets, s.categories), "Budgets")
+        tabs.addTab(ChartsView(s.reports), "Charts")
+        tabs.addTab(SubscriptionsView(s.recurring), "Subscriptions")
+        tabs.addTab(RulesView(s.rules, s.categories), "Rules")
+        tabs.addTab(CategoriesView(s.categories), "Categories")
         # Each view reloads when shown, so edits made in one tab appear in the others.
-        tabs.currentChanged.connect(lambda i: tabs.widget(i).refresh())
+        tabs.currentChanged.connect(self.refresh_current_tab)
         # Redraw on light/dark switches too, so theme-dependent colours (budget bars) update.
-        QGuiApplication.styleHints().colorSchemeChanged.connect(lambda _: tabs.currentWidget().refresh())
+        # (A method, not a lambda: Qt disconnects it automatically when this window is deleted.)
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self.refresh_current_tab)
         # Settings sits at the right end of the tab bar instead of in a separate menu bar.
         tabs.setCornerWidget(self._settings_button(), Qt.Corner.TopRightCorner)
 
@@ -65,6 +73,8 @@ class MainWindow(QMainWindow):
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 4)  # keep the tabs flush with the window edges
+        if demo:
+            layout.addWidget(self._demo_banner())
         layout.addWidget(tabs)
         layout.addWidget(credit)
         self.setCentralWidget(central)
@@ -80,6 +90,15 @@ class MainWindow(QMainWindow):
         dates = {key: label for key, (label, _fmt, _qt) in DATE_FORMATS.items()}
         current = self.settings.value("date_format", "iso")
         self._add_choice_menu(menu, "&Date format", dates, current, self.set_date_format)
+
+        menu.addSeparator()
+        for text, slot in (("&Back up data…", self.back_up), ("&Restore from backup…", self.restore)):
+            action = menu.addAction(text)
+            action.triggered.connect(slot)
+            action.setEnabled(not self.demo)  # backing up demo data would only be confusing
+        if not self.demo:
+            menu.addSeparator()
+            menu.addAction("&Explore demo data").triggered.connect(self.explore_demo_requested)
 
         button = QToolButton()
         button.setText("Settings")
@@ -101,6 +120,77 @@ class MainWindow(QMainWindow):
             action.setChecked(key == current)
             group.addAction(action)
             action.triggered.connect(lambda _checked, k=key: on_pick(k))
+
+    def _demo_banner(self) -> QWidget:
+        banner = QWidget()
+        banner.setStyleSheet("background: palette(highlight); color: palette(highlighted-text);")
+        row = QHBoxLayout(banner)
+        row.setContentsMargins(12, 6, 12, 6)
+        row.addWidget(QLabel("You're exploring demo data. Nothing here is saved, and your real data isn't touched."))
+        row.addStretch()
+        exit_btn = QPushButton("Exit demo")
+        exit_btn.clicked.connect(self.exit_demo_requested)
+        row.addWidget(exit_btn)
+        return banner
+
+    def refresh_current_tab(self, *_) -> None:
+        self.tabs.currentWidget().refresh()
+
+    def show_welcome(self) -> None:
+        """First launch with no data: offer demo data, an import, or an empty start."""
+        box = QMessageBox(self)
+        box.setWindowTitle(f"Welcome to {APP_NAME}")
+        box.setText(f"<b>Welcome to {APP_NAME}</b><br>{TAGLINE}.")
+        box.setInformativeText(
+            "Import a CSV export from your bank to get started, or look around first with a year of demo data. "
+            "Everything stays on this PC."
+        )
+        demo = box.addButton("Explore demo data", QMessageBox.ButtonRole.ActionRole)
+        import_csv = box.addButton("Import my bank CSV…", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Start empty", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(demo)
+        box.exec()
+        self.settings.setValue("welcome_shown", True)  # once is enough; the demo stays in Settings
+        if box.clickedButton() is demo:
+            self.explore_demo_requested.emit()
+        elif box.clickedButton() is import_csv:
+            self.transactions_view.import_csv()
+
+    def back_up(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Back up SkimWise data", f"SkimWise backup {date.today()}.db", "SkimWise backup (*.db)"
+        )
+        if not path:
+            return
+        try:
+            self.services.backup.backup_to(path)
+        except (BackupError, OSError) as e:
+            QMessageBox.warning(self, "Backup failed", str(e))
+            return
+        QMessageBox.information(self, "Backup saved", f"Your data was saved to:\n{path}")
+
+    def restore(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Restore SkimWise backup", "", "SkimWise backup (*.db)")
+        if not path:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Restore backup",
+            "Replace ALL your current data with this backup?\n\n"
+            "Anything added since the backup was made will be lost. If you're not sure, cancel and "
+            "back up your current data first.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,  # the safe choice is the default
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.services.backup.restore_from(path)
+        except (BackupError, OSError) as e:
+            QMessageBox.warning(self, "Restore failed", f"Nothing was changed.\n\n{e}")
+            return
+        self.refresh_current_tab()
+        QMessageBox.information(self, "Backup restored", "Your data was restored from the backup.")
 
     def closeEvent(self, event) -> None:
         self.settings.setValue("geometry", self.saveGeometry())  # reopen at the same size and place

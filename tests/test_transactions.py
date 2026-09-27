@@ -81,7 +81,7 @@ def test_update_delete_and_category_delete_uncategorizes(db):
     cats.delete(pets.id)
     assert txs.list()[0].category_id is None  # ON DELETE SET NULL (needs foreign_keys ON)
 
-    txs.delete(tx.id)
+    txs.delete([tx.id])
     assert txs.list() == []
 
 

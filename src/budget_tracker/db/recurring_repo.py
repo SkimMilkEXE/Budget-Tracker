@@ -32,6 +32,14 @@ class RecurringRepository:
                 (name, amount_cents, frequency, item_id),
             )
 
+    def dismissed_count(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM recurring_items WHERE dismissed = 1").fetchone()[0]
+
+    def clear_dismissed(self) -> int:
+        """Forget every "not recurring" choice. Returns how many were cleared."""
+        with self.conn:
+            return self.conn.execute("DELETE FROM recurring_items WHERE dismissed = 1").rowcount
+
     def delete(self, item_id: int) -> None:
         with self.conn:
             self.conn.execute("DELETE FROM recurring_items WHERE id = ?", (item_id,))
