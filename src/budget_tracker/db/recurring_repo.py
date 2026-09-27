@@ -15,9 +15,13 @@ class RecurringRepository:
         return [RecurringItem(*r) for r in rows]
 
     def known_merchants(self) -> set[str]:
-        """Upper-cased merchant of every item, confirmed or dismissed: these aren't suggested again.
-        Items added by hand have no merchant, so their name stands in for it."""
-        rows = self.conn.execute("SELECT upper(COALESCE(merchant, name)) FROM recurring_items")
+        """Upper-cased merchant AND name of every item, confirmed or dismissed: a suggestion matching
+        either isn't shown. (Matching names too means confirming one can never collide with an item
+        the user renamed to that name.)"""
+        rows = self.conn.execute(
+            "SELECT upper(merchant) FROM recurring_items WHERE merchant IS NOT NULL "
+            "UNION SELECT upper(name) FROM recurring_items"
+        )
         return {r[0] for r in rows}
 
     def add(
