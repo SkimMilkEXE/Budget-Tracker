@@ -34,6 +34,7 @@ from budget_tracker.services.csv_import import (
 )
 from budget_tracker.services.money import format_cents
 from budget_tracker.ui.colors import amount_color
+from budget_tracker.ui.settings import date_format
 
 NEW_PROFILE = "(New profile)"
 
@@ -202,13 +203,14 @@ class ImportDialog(QDialog):
                 f"{counts[ERROR]} unreadable (skipped)"
             )
 
+        fmt = date_format()
         self.table.setRowCount(len(self.parsed))
         for i, r in enumerate(self.parsed):
             status = {NEW: "New", DUPLICATE: "Duplicate"}.get(r.status, f"Row {r.row_number}: {r.error}")
             cells = [status, "", "", "", ""]
             if r.tx:
                 category = self.category_names.get(r.tx.category_id, "Uncategorized")
-                cells[1:] = [r.tx.date.isoformat(), r.tx.description, category, format_cents(r.tx.amount_cents)]
+                cells[1:] = [r.tx.date.strftime(fmt), r.tx.description, category, format_cents(r.tx.amount_cents)]
             for col, text in enumerate(cells):
                 self.table.setItem(i, col, QTableWidgetItem(text))
             if r.tx:

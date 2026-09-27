@@ -28,6 +28,7 @@ from budget_tracker.services.transactions import TransactionError, TransactionSe
 from budget_tracker.ui.colors import amount_color
 from budget_tracker.ui.import_dialog import ImportDialog
 from budget_tracker.ui.rules_view import RuleDialog
+from budget_tracker.ui.settings import date_format, month_label, qt_date_format
 
 UNCATEGORIZED = "Uncategorized"
 
@@ -43,10 +44,11 @@ class TransactionTableModel(QAbstractTableModel):
         super().__init__()
         self.rows: list[Transaction] = []
         self.category_names: dict[int, str] = {}
+        self.date_format = "%Y-%m-%d"
 
-    def set_rows(self, rows: list[Transaction], category_names: dict[int, str]) -> None:
+    def set_rows(self, rows: list[Transaction], category_names: dict[int, str], date_format: str) -> None:
         self.beginResetModel()  # tells attached views to drop everything and re-ask
-        self.rows, self.category_names = rows, category_names
+        self.rows, self.category_names, self.date_format = rows, category_names, date_format
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()):
@@ -65,7 +67,7 @@ class TransactionTableModel(QAbstractTableModel):
         col = index.column()
         category = self.category_names.get(tx.category_id, UNCATEGORIZED)
         if role == Qt.ItemDataRole.DisplayRole:
-            return [tx.date.isoformat(), tx.description, category, format_cents(tx.amount_cents)][col]
+            return [tx.date.strftime(self.date_format), tx.description, category, format_cents(tx.amount_cents)][col]
         if role == Qt.ItemDataRole.UserRole:
             return [tx.date.isoformat(), tx.description.lower(), category.lower(), tx.amount_cents][col]
         if role == Qt.ItemDataRole.ForegroundRole and col == 3:
@@ -86,7 +88,7 @@ class TransactionDialog(QDialog):
 
         self.date = QDateEdit(QDate.currentDate())
         self.date.setCalendarPopup(True)
-        self.date.setDisplayFormat("yyyy-MM-dd")
+        self.date.setDisplayFormat(qt_date_format())
         self.kind = QComboBox()
         self.kind.addItems(["Expense", "Income"])
         self.amount = QLineEdit()
@@ -195,14 +197,14 @@ class TransactionsView(QWidget):
     def refresh(self) -> None:
         """Reload filter choices (categories/months may have changed) and the table."""
         self._category_list = self.categories.list()
-        _refill(self.month, "All months", [(m, m) for m in self.transactions.months()])
+        _refill(self.month, "All months", [(month_label(m), m) for m in self.transactions.months()])
         categories = [(UNCATEGORIZED, NO_CATEGORY)] + [(c.name, c.id) for c in self._category_list]
         _refill(self.category, "All categories", categories)
         self.reload_table()
 
     def reload_table(self) -> None:
         rows = self.transactions.list(self.month.currentData(), self.category.currentData(), self.search.text())
-        self.model.set_rows(rows, {c.id: c.name for c in self._category_list})
+        self.model.set_rows(rows, {c.id: c.name for c in self._category_list}, date_format())
         self.update_buttons()
 
     def update_buttons(self) -> None:
