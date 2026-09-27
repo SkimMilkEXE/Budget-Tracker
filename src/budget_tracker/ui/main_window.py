@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QActionGroup, QGuiApplication
-from PySide6.QtWidgets import QMainWindow, QMenu, QTabWidget, QToolButton
+from PySide6.QtGui import QActionGroup, QGuiApplication, QPalette
+from PySide6.QtWidgets import QLabel, QMainWindow, QMenu, QTabWidget, QToolButton, QVBoxLayout, QWidget
 
 from budget_tracker.services.categories import CategoryService
 from budget_tracker.services.csv_import import ImportService
@@ -40,7 +40,20 @@ class MainWindow(QMainWindow):
         tabs.currentChanged.connect(lambda i: tabs.widget(i).refresh())
         # Settings sits at the right end of the tab bar instead of in a separate menu bar.
         tabs.setCornerWidget(self._settings_button(), Qt.Corner.TopRightCorner)
-        self.setCentralWidget(tabs)
+
+        credit = QLabel("Built by SkimMilk.EXE")
+        credit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credit.setForegroundRole(QPalette.ColorRole.PlaceholderText)  # muted grey that follows the theme
+        font = credit.font()
+        font.setPointSizeF(font.pointSizeF() * 0.85)
+        credit.setFont(font)
+
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 4)  # keep the tabs flush with the window edges
+        layout.addWidget(tabs)
+        layout.addWidget(credit)
+        self.setCentralWidget(central)
 
     def _settings_button(self) -> QToolButton:
         menu = QMenu(self)
