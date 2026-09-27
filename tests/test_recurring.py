@@ -160,3 +160,14 @@ def test_upgrade_fills_in_merchant_for_existing_items():
     conn.commit()
     migrate(conn)
     assert RecurringRepository(conn).known_merchants() == {"NETFLIX.COM"}
+
+
+def test_renaming_to_another_merchants_name_never_breaks_confirm(service):
+    by_name = {c.name: c for c in service.suggestions()}
+    service.confirm(by_name["NETFLIX.COM"])
+    netflix = next(i for i in service.items() if i.name == "NETFLIX.COM")
+    service.update(netflix.id, "Spotify USA", "15.49", MONTHLY)
+    # A suggestion that would collide with that name isn't offered, so Confirm can't fail on it.
+    assert "SPOTIFY USA" not in {c.name for c in service.suggestions()}
+    for c in service.suggestions():
+        service.confirm(c)  # every remaining suggestion confirms cleanly
