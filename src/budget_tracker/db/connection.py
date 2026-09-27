@@ -44,6 +44,12 @@ MIGRATIONS = [
         priority    INTEGER NOT NULL                -- lower runs first; first match wins
     );
     """,
+    """
+    CREATE TABLE budgets (
+        category_id INTEGER PRIMARY KEY REFERENCES categories(id) ON DELETE CASCADE,
+        limit_cents INTEGER NOT NULL CHECK (limit_cents > 0)   -- per month, applies to every month
+    );
+    """,
 ]
 
 
