@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QStandardPaths, Qt, Signal
 from PySide6.QtGui import QActionGroup, QGuiApplication, QPalette
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_tracker import __version__
 from budget_tracker.services.app_services import AppServices
 from budget_tracker.services.backup import BackupError
 from budget_tracker.ui.budgets_view import BudgetsView
@@ -96,9 +97,10 @@ class MainWindow(QMainWindow):
             action = menu.addAction(text)
             action.triggered.connect(slot)
             action.setEnabled(not self.demo)  # backing up demo data would only be confusing
+        menu.addSeparator()
         if not self.demo:
-            menu.addSeparator()
             menu.addAction("&Explore demo data").triggered.connect(self.explore_demo_requested)
+        menu.addAction(f"&About {APP_NAME}").triggered.connect(self.show_about)
 
         button = QToolButton()
         button.setText("Settings")
@@ -132,6 +134,17 @@ class MainWindow(QMainWindow):
         exit_btn.clicked.connect(self.exit_demo_requested)
         row.addWidget(exit_btn)
         return banner
+
+    def show_about(self) -> None:
+        data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+        QMessageBox.about(
+            self,
+            f"About {APP_NAME}",
+            f"<b>{APP_NAME} {__version__}</b><br>{TAGLINE}.<br><br>"
+            "A private, local-only budget app: no accounts, no internet, no tracking.<br>"
+            f"Your data is stored on this PC in:<br><code>{data}</code><br><br>"
+            "Built by SkimMilk.EXE",
+        )
 
     def refresh_current_tab(self, *_) -> None:
         self.tabs.currentWidget().refresh()

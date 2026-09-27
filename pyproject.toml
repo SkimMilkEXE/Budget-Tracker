@@ -1,12 +1,13 @@
 [project]
 name = "skimwise"
-version = "0.1.0"
+dynamic = ["version"]  # read from budget_tracker/__init__.py
 description = "SkimWise: skim the fat off your spending. A private, local-only desktop budget app."
 requires-python = ">=3.12"
 dependencies = ["PySide6>=6.7"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff"]
+build = ["pyinstaller"]  # python scripts/build.py -> dist/SkimWise.exe
 
 [project.gui-scripts]
 skimwise = "budget_tracker.main:main"
@@ -14,6 +15,9 @@ skimwise = "budget_tracker.main:main"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "budget_tracker.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
