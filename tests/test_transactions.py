@@ -31,13 +31,14 @@ from budget_tracker.services.transactions import TransactionError, TransactionSe
         ("1 234,56", 123456),  # space as thousands separator
         ("-5.00 DR", -500),  # two negative markers still mean negative, never positive
         ("(-5.00)", -500),
+        ("12,345,678.90", 1234567890),
     ],
 )
 def test_parse_cents(text, cents):
     assert parse_cents(text) == cents
 
 
-@pytest.mark.parametrize("text", ["", "abc", "1.234", "nan", "inf", "$"])
+@pytest.mark.parametrize("text", ["", "abc", "1.234", "nan", "inf", "$", "1,2,3", "12,34,5", "1,23,4.00"])
 def test_parse_cents_rejects(text):
     with pytest.raises(ValueError):
         parse_cents(text)

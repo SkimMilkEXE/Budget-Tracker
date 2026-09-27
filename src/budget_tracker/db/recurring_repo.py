@@ -14,15 +14,20 @@ class RecurringRepository:
         )
         return [RecurringItem(*r) for r in rows]
 
-    def known_names(self) -> set[str]:
-        """Upper-cased names of every item, confirmed or dismissed: these aren't suggested again."""
-        return {r[0].upper() for r in self.conn.execute("SELECT name FROM recurring_items")}
+    def known_merchants(self) -> set[str]:
+        """Upper-cased merchant of every item, confirmed or dismissed: these aren't suggested again.
+        Items added by hand have no merchant, so their name stands in for it."""
+        rows = self.conn.execute("SELECT upper(COALESCE(merchant, name)) FROM recurring_items")
+        return {r[0] for r in rows}
 
-    def add(self, name: str, amount_cents: int, frequency: str, dismissed: bool = False) -> None:
+    def add(
+        self, name: str, amount_cents: int, frequency: str, dismissed: bool = False, merchant: str | None = None
+    ) -> None:
         with self.conn:
             self.conn.execute(
-                "INSERT INTO recurring_items (name, amount_cents, frequency, dismissed) VALUES (?, ?, ?, ?)",
-                (name, amount_cents, frequency, dismissed),
+                "INSERT INTO recurring_items (name, amount_cents, frequency, dismissed, merchant) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (name, amount_cents, frequency, dismissed, merchant),
             )
 
     def update(self, item_id: int, name: str, amount_cents: int, frequency: str) -> None:
