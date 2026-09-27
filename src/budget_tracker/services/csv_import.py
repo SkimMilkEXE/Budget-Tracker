@@ -2,6 +2,7 @@
 
 import csv
 import io
+import re
 from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import date, datetime
@@ -41,7 +42,14 @@ def read_rows(path: Path | str) -> list[list[str]]:
         text = raw.decode("utf-8-sig")  # -sig strips the byte-order mark Excel adds
     except UnicodeDecodeError:
         text = raw.decode("cp1252", errors="replace")  # older Windows exports
-    return list(csv.reader(io.StringIO(text, newline="")))
+    try:
+        # European banks often use ";" (because "," is their decimal point); some use tabs.
+        # Only the delimiter is taken from the sniffer: its quote-character guess can be fooled
+        # by apostrophes in descriptions ("TRADER JOE'S"), and bank exports always quote with ".
+        delimiter = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|").delimiter
+    except csv.Error:
+        delimiter = ","  # can't tell (e.g. a one-column file): assume commas
+    return list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
 
 
 def guess_header_row(rows: list[list[str]]) -> int:
@@ -164,9 +172,13 @@ class ImportService:
         return self.profiles.save(replace(profile, name=name))
 
 
+_TIME_SUFFIX = re.compile(r"[ T]\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*([AaPp][Mm])?(Z|[+-]\d{2}:?\d{2})?$")
+
+
 def _parse_date(value: str, fmt: str) -> date | None:
     try:
-        return datetime.strptime(value, fmt).date()
+        # Some exports add a time ("2026-08-01 14:32:00", "8/1/2026 2:32 PM"); only the date matters.
+        return datetime.strptime(_TIME_SUFFIX.sub("", value.strip()), fmt).date()
     except ValueError:
         return None
 

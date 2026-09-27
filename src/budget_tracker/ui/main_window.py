@@ -36,8 +36,9 @@ class MainWindow(QMainWindow):
     ):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} - {TAGLINE}")
-        self.resize(900, 600)
         self.settings = app_settings()
+        self.resize(900, 600)
+        self.restoreGeometry(self.settings.value("geometry", b""))  # last size/position, if any
 
         # One tab per feature.
         self.tabs = tabs = QTabWidget()
@@ -100,6 +101,10 @@ class MainWindow(QMainWindow):
             action.setChecked(key == current)
             group.addAction(action)
             action.triggered.connect(lambda _checked, k=key: on_pick(k))
+
+    def closeEvent(self, event) -> None:
+        self.settings.setValue("geometry", self.saveGeometry())  # reopen at the same size and place
+        super().closeEvent(event)
 
     def set_theme(self, name: str) -> None:
         QGuiApplication.styleHints().setColorScheme(THEMES[name])

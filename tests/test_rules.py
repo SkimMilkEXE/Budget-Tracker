@@ -96,3 +96,17 @@ def test_import_applies_rules():
 
 def test_match_empty_rules():
     assert match([], "anything") is None
+
+
+def test_edit_rule_changes_what_it_matches(app):
+    rules, _, _, cats = app
+    rule = rules.add("starbucks", cats["Dining"])
+    rules.update(rule.id, "  dunkin  ", cats["Groceries"])
+    assert [(r.pattern, r.category_id) for r in rules.list()] == [("dunkin", cats["Groceries"])]
+    assert rules.categorize("DUNKIN #3345") == cats["Groceries"]
+    assert rules.categorize("STARBUCKS #1") is None
+    with pytest.raises(RuleError):
+        rules.update(rule.id, "", cats["Dining"])
+
+    rules.delete(rule.id)
+    assert rules.list() == []

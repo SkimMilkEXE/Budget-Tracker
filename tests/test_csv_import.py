@@ -122,3 +122,56 @@ def _cols(p: BankProfile) -> dict:
 def test_profile_without_columns_matches_nothing(service):
     service.profiles.save(BankProfile(name="Broken"))
     assert service.matching_profile(read_rows(FIXTURES / "checking.csv")) is None
+
+
+def test_semicolon_file_with_decimal_commas_and_times(tmp_path):
+    """A typical European export: ";" separated, day-first dates with times, decimal commas."""
+    f = tmp_path / "eu.csv"
+    f.write_text(
+        "Datum;Omschrijving;Bedrag\n"
+        "02-09-2026 08:15;Albert Heijn;-12,50\n"
+        "15-09-2026 17:40;Salaris;2.450,00\n"
+        "25-09-2026 09:00;Huur;-950,00\n",
+        encoding="utf-8",
+    )
+    rows = read_rows(f)
+    assert rows[0] == ["Datum", "Omschrijving", "Bedrag"]
+    p = BankProfile(date_col="Datum", description_col="Omschrijving", amount_col="Bedrag")
+    txs = [r.tx for r in parse(rows, p)]
+    assert [(t.date, t.amount_cents) for t in txs] == [
+        (date(2026, 9, 2), -1250),
+        (date(2026, 9, 15), 245000),
+        (date(2026, 9, 25), -95000),
+    ]
+
+
+def test_tab_separated_file(tmp_path):
+    f = tmp_path / "tabs.tsv"
+    f.write_text("Date\tDescription\tAmount\n2026-09-01\tCoffee, large\t-4.50\n", encoding="utf-8")
+    assert read_rows(f) == [["Date", "Description", "Amount"], ["2026-09-01", "Coffee, large", "-4.50"]]
+
+
+def test_unreadable_rows_are_reported_not_imported():
+    rows = [
+        ["Date", "Desc", "Debit", "Credit"],
+        ["2026-09-01", "", "5", ""],  # no description
+        ["2026-09-02", "Nothing", "", ""],  # neither debit nor credit
+        ["2026-09-03", "Garbage", "abc", ""],  # unreadable amount
+        ["2026-09-04", "Zero", "0", ""],
+        ["", "", "", ""],  # blank line: skipped silently
+        ["2026-09-05", "Fine", "5", ""],
+    ]
+    p = BankProfile(date_col="Date", description_col="Desc", debit_col="Debit", credit_col="Credit")
+    parsed = parse(rows, p)
+    assert [(r.row_number, r.status, r.error) for r in parsed] == [
+        (2, ERROR, "Missing description"),
+        (3, ERROR, "Unreadable amount"),
+        (4, ERROR, "Unreadable amount"),
+        (5, ERROR, "Amount is zero"),
+        (7, NEW, ""),
+    ]
+
+
+def test_guess_header_row_on_empty_file():
+    assert guess_header_row([]) == 0
+    assert guess_header_row([[], [""]]) == 0
