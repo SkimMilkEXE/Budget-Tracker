@@ -33,6 +33,9 @@ def main() -> None:
             # Keep the package layout so main.py finds its icons at budget_tracker/assets.
             f"--add-data={ASSETS}{os.pathsep}budget_tracker/assets",
             f"--paths={SRC}",
+            # Installed for the tests (fpdf2 writes fake PDFs) but never needed by the app. pypdf
+            # would only use Pillow to extract images, which SkimWise doesn't do.
+            *(f"--exclude-module={m}" for m in ("fpdf", "PIL", "fontTools", "defusedxml")),
             f"--distpath={ROOT / 'dist'}",
             f"--workpath={BUILD}",
             f"--specpath={BUILD}",  # the generated .spec is build output, not source

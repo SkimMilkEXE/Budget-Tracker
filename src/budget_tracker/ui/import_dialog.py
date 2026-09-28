@@ -59,8 +59,16 @@ class ImportDialog(QDialog):
         self.profile.addItem(NEW_PROFILE, None)
         for p in service.list_profiles():
             self.profile.addItem(p.name, p)
-        self.skip = QSpinBox()
-        self.skip.setRange(0, max(0, len(rows) - 1))
+        # Which line holds the column names, counted from 1 like a person would. Bank profiles store
+        # it as "rows above the header" (line 1 = 0 rows above), so saved profiles keep working.
+        self.header_line = QSpinBox()
+        self.header_line.setRange(1, max(1, len(rows)))
+        self.header_line.setToolTip(
+            "Some banks put account details above the table. Pick the line that has the column names "
+            "(like Date, Description, Amount). SkimWise usually finds it for you."
+        )
+        self.header_found = QLabel()  # the column names on that line, so a wrong pick is obvious
+        self.header_found.setWordWrap(True)
         self.date_col, self.desc_col, self.amount_col, self.debit_col, self.credit_col = (QComboBox() for _ in range(5))
         self.single = QRadioButton("One amount column")
         self.split = QRadioButton("Separate debit and credit columns")
@@ -81,7 +89,7 @@ class ImportDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         self.profile.currentIndexChanged.connect(self._profile_chosen)
-        self.skip.valueChanged.connect(self._skip_changed)
+        self.header_line.valueChanged.connect(self._header_line_changed)
         for w in (self.date_col, self.desc_col, self.amount_col, self.debit_col, self.credit_col):
             w.currentIndexChanged.connect(self.update_preview)
         self.single.toggled.connect(self.update_preview)
@@ -99,7 +107,8 @@ class ImportDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Bank profile:", self.profile)
-        form.addRow("Rows above header:", self.skip)
+        form.addRow("Column names are on line:", self.header_line)
+        form.addRow("", self.header_found)
         form.addRow("Date column:", self.date_col)
         form.addRow("Description column:", self.desc_col)
         form.addRow("Amount:", amount_modes)
@@ -107,6 +116,10 @@ class ImportDialog(QDialog):
         form.addRow("", debit_credit)
         form.addRow("", self.flip)
         form.addRow("Save as profile:", self.profile_name)
+
+        if path.suffix.lower() == ".pdf":  # a PDF statement always arrives with its column names on line 1
+            form.setRowVisible(self.header_line, False)
+            form.setRowVisible(self.header_found, False)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -126,7 +139,7 @@ class ImportDialog(QDialog):
 
     def _apply(self, p: BankProfile) -> None:
         self._loading = True
-        self.skip.setValue(p.skip_rows)
+        self.header_line.setValue(p.skip_rows + 1)
         self._fill_columns()
         for combo, name in (
             (self.date_col, p.date_col),
@@ -146,7 +159,7 @@ class ImportDialog(QDialog):
         single = self.single.isChecked()
         return BankProfile(
             name=self.profile_name.text(),
-            skip_rows=self.skip.value(),
+            skip_rows=self._skip_rows(),
             date_col=self.date_col.currentData(),
             description_col=self.desc_col.currentData(),
             amount_col=self.amount_col.currentData() if single else "",
@@ -156,8 +169,12 @@ class ImportDialog(QDialog):
         )
 
     def _fill_columns(self) -> None:
-        """Column choices come from the header row, which moves when 'rows above header' changes."""
-        header = header_of(self.rows, self.skip.value())
+        """Column choices come from the header line, which moves when the user picks another line."""
+        header = header_of(self.rows, self._skip_rows())
+        names = [h for h in header if h]
+        self.header_found.setText(
+            f"Found: {'  ·  '.join(names)}" if names else "That line is empty. Pick the line with the column names."
+        )
         for combo in (self.date_col, self.desc_col, self.amount_col, self.debit_col, self.credit_col):
             current = combo.currentData()
             combo.blockSignals(True)
@@ -173,11 +190,14 @@ class ImportDialog(QDialog):
         if p:
             self._apply(p)
 
-    def _skip_changed(self) -> None:
-        # A different header row means different column names: re-guess them, keep the rest.
+    def _skip_rows(self) -> int:
+        return self.header_line.value() - 1
+
+    def _header_line_changed(self) -> None:
+        # A different header line means different column names: re-guess them, keep the rest.
         if not self._loading:
             current = self.current_profile()
-            guess = guess_profile(header_of(self.rows, self.skip.value()), self.skip.value())
+            guess = guess_profile(header_of(self.rows, self._skip_rows()), self._skip_rows())
             self._apply(replace(guess, name=current.name, flip_sign=current.flip_sign))
 
     # --- preview ---
