@@ -168,3 +168,23 @@ def test_failed_backup_keeps_the_previous_backup(services, tmp_path, monkeypatch
 def test_backup_to_unwritable_place_is_a_clear_error(services, tmp_path):
     with pytest.raises(BackupError, match="another folder"):
         services.backup.backup_to(tmp_path / "no such folder" / "backup.db")
+
+
+# --- delete all data ---
+
+
+def test_delete_all_returns_to_a_fresh_install(services):
+    add(services, "Gone", "10")
+    dining = next(c.id for c in services.categories.list() if c.name == "Dining")
+    services.rules.add("coffee", dining)
+    services.budgets.set_limit(dining, "100")
+    services.recurring.add("Gym", "20", "monthly")
+    services.categories.add("Custom")
+
+    services.backup.delete_all()
+    fresh = build_services(connect(":memory:"))
+    assert services.transactions.list() == [] and services.rules.list() == []
+    assert services.budgets.lines("2026-09") == [] and services.recurring.items() == []
+    assert [c.name for c in services.categories.list()] == [c.name for c in fresh.categories.list()]
+    add(services, "Works after", "5")  # the app keeps working normally afterwards
+    assert len(services.transactions.list()) == 1

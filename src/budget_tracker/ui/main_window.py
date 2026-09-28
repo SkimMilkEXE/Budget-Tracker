@@ -6,6 +6,7 @@ from PySide6.QtGui import QActionGroup, QGuiApplication, QPalette
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -93,10 +94,15 @@ class MainWindow(QMainWindow):
         self._add_choice_menu(menu, "&Date format", dates, current, self.set_date_format)
 
         menu.addSeparator()
-        for text, slot in (("&Back up data…", self.back_up), ("&Restore from backup…", self.restore)):
+        data_actions = (
+            ("&Back up data…", self.back_up),
+            ("&Restore from backup…", self.restore),
+            ("&Delete all data…", self.delete_all),
+        )
+        for text, slot in data_actions:
             action = menu.addAction(text)
             action.triggered.connect(slot)
-            action.setEnabled(not self.demo)  # backing up demo data would only be confusing
+            action.setEnabled(not self.demo)  # these act on your real data, never the demo
         menu.addSeparator()
         if not self.demo:
             menu.addAction("&Explore demo data").triggered.connect(self.explore_demo_requested)
@@ -155,11 +161,12 @@ class MainWindow(QMainWindow):
         box.setWindowTitle(f"Welcome to {APP_NAME}")
         box.setText(f"<b>Welcome to {APP_NAME}</b><br>{TAGLINE}.")
         box.setInformativeText(
-            "Import a CSV export from your bank to get started, or look around first with a year of demo data. "
+            "Import a CSV or PDF statement from your bank to get started, or look around first with a year "
+            "of demo data. "
             "Everything stays on this PC."
         )
         demo = box.addButton("Explore demo data", QMessageBox.ButtonRole.ActionRole)
-        import_csv = box.addButton("Import my bank CSV…", QMessageBox.ButtonRole.AcceptRole)
+        import_csv = box.addButton("Import a bank statement…", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Start empty", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(demo)
         box.exec()
@@ -169,18 +176,50 @@ class MainWindow(QMainWindow):
         elif box.clickedButton() is import_csv:
             self.transactions_view.import_csv()
 
-    def back_up(self) -> None:
+    def back_up(self) -> bool:
+        """Returns True if a backup was saved."""
         path, _ = QFileDialog.getSaveFileName(
             self, "Back up SkimWise data", f"SkimWise backup {date.today()}.db", "SkimWise backup (*.db)"
         )
         if not path:
-            return
+            return False
         try:
             self.services.backup.backup_to(path)
         except (BackupError, OSError) as e:
             QMessageBox.warning(self, "Backup failed", str(e))
-            return
+            return False
         QMessageBox.information(self, "Backup saved", f"Your data was saved to:\n{path}")
+        return True
+
+    def delete_all(self) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Delete all data")
+        box.setText("<b>Delete all your data and start fresh?</b>")
+        box.setInformativeText(
+            "This permanently deletes every transaction, rule, budget, subscription and bank profile, "
+            "and puts the categories back to the defaults. Your theme and format settings are kept.\n\n"
+            "It can't be undone unless you have a backup."
+        )
+        back_up_first = box.addButton("Back up first…", QMessageBox.ButtonRole.ActionRole)
+        carry_on = box.addButton("Delete everything…", QMessageBox.ButtonRole.DestructiveRole)
+        box.setDefaultButton(box.addButton(QMessageBox.StandardButton.Cancel))  # the safe choice
+        box.exec()
+        if box.clickedButton() is back_up_first:
+            if not self.back_up():
+                return  # no backup, no delete
+        elif box.clickedButton() is not carry_on:
+            return
+
+        typed, ok = QInputDialog.getText(self, "Delete all data", "Type DELETE to confirm:")
+        if not ok or typed.strip() != "DELETE":
+            if ok:
+                QMessageBox.information(self, "Delete all data", "Nothing was deleted.")
+            return
+        self.services.backup.delete_all()
+        self.settings.remove("welcome_shown")  # the next launch greets you like a first launch
+        self.refresh_current_tab()
+        QMessageBox.information(self, "Delete all data", f"All data deleted. {APP_NAME} is back to a fresh start.")
 
     def restore(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Restore SkimWise backup", "", "SkimWise backup (*.db)")

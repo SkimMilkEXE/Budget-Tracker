@@ -23,8 +23,9 @@ from PySide6.QtWidgets import (
 
 from budget_tracker.models import NO_CATEGORY, Transaction
 from budget_tracker.services.categories import CategoryService
-from budget_tracker.services.csv_import import ImportService, read_rows
+from budget_tracker.services.csv_import import CsvImportError, ImportService, read_rows
 from budget_tracker.services.money import count, format_cents
+from budget_tracker.services.pdf_import import read_statement
 from budget_tracker.services.rules import RuleService, suggest_pattern
 from budget_tracker.services.transactions import TransactionError, TransactionService, totals
 from budget_tracker.ui.colors import amount_color
@@ -156,7 +157,7 @@ class TransactionsView(QWidget):
         self.search.textChanged.connect(self.reload_table)
 
         # Action buttons
-        import_btn = QPushButton("Import CSV…")
+        import_btn = QPushButton("Import…")
         add_btn = QPushButton("Add…")
         self.edit_btn = QPushButton("Edit…")
         self.set_category_btn = QPushButton("Set category…")
@@ -221,7 +222,7 @@ class TransactionsView(QWidget):
         elif self.month.currentData() or self.category.currentData() is not None or self.search.text():
             self.summary.setText("No transactions match these filters.")
         else:
-            self.summary.setText("No transactions yet. Click “Import CSV…” to load your bank's export.")
+            self.summary.setText("No transactions yet. Click “Import…” to load a CSV or PDF statement from your bank.")
         self.update_buttons()
 
     def update_buttons(self) -> None:
@@ -241,13 +242,19 @@ class TransactionsView(QWidget):
         return rows[0] if len(rows) == 1 else None
 
     def import_csv(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Import bank CSV", "", "CSV files (*.csv);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import bank statement",
+            "",
+            "Bank statements (*.csv *.pdf);;CSV files (*.csv);;PDF statements (*.pdf);;All files (*)",
+        )
         if not path:
             return
         try:
-            rows = read_rows(path)
-        except OSError as e:
-            QMessageBox.warning(self, "Can't open file", str(e))
+            # A PDF statement becomes the same rows as a CSV, so everything after this is shared.
+            rows = read_statement(path) if path.lower().endswith(".pdf") else read_rows(path)
+        except (OSError, CsvImportError) as e:
+            QMessageBox.warning(self, "Can't read that file", str(e))
             return
         names = {c.id: c.name for c in self._category_list}
         dialog = ImportDialog(self, self.importer, Path(path), rows, names)

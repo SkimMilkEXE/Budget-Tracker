@@ -130,7 +130,13 @@ def test_settings_menu_changes_formats_and_theme(window):
     submenu = {a.text().replace("&", ""): a.menu() for a in menu.actions() if a.menu()}
     assert set(submenu) == {"Theme", "Month format", "Date format"}
     actions = [a.text().replace("&", "") for a in menu.actions() if not a.menu() and not a.isSeparator()]
-    assert actions == ["Back up data…", "Restore from backup…", "Explore demo data", "About SkimWise"]
+    assert actions == [
+        "Back up data…",
+        "Restore from backup…",
+        "Delete all data…",
+        "Explore demo data",
+        "About SkimWise",
+    ]
 
     next(a for a in submenu["Date format"].actions() if a.text() == "Aug 31, 2026").trigger()
     view = window.tabs.currentWidget()
@@ -256,3 +262,57 @@ def test_about_shows_version_and_data_folder(window, monkeypatch):
     window.show_about()
     title, text = shown[0]
     assert title == "About SkimWise" and f"SkimWise {__version__}" in text and "stored on this PC" in text
+
+
+@pytest.mark.parametrize(
+    "button, backup_ok, typed, deleted",
+    [
+        ("Cancel", True, "DELETE", False),
+        ("Delete everything…", True, "delete", False),  # must be typed exactly
+        ("Delete everything…", True, "DELETE", True),
+        ("Back up first…", False, "DELETE", False),  # the backup was cancelled or failed: stop
+        ("Back up first…", True, "DELETE", True),
+    ],
+)
+def test_delete_all_needs_confirmation(window, monkeypatch, button, backup_ok, typed, deleted):
+    import_demo(window)
+    settings.app_settings().setValue("welcome_shown", True)
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: next(b for b in box.buttons() if b.text() == button).click())
+    monkeypatch.setattr(window, "back_up", lambda: backup_ok)
+    monkeypatch.setattr("budget_tracker.ui.main_window.QInputDialog.getText", lambda *_: (typed, True))
+
+    window.delete_all()
+    remaining = window.transactions_view.proxy.rowCount()
+    assert (remaining == 0) == deleted
+    assert settings.app_settings().contains("welcome_shown") != deleted  # a fresh start greets you again
+
+
+def test_import_button_accepts_pdf_statements(window, monkeypatch, tmp_path):
+    from test_pdf_import import MT_STATEMENT, make_pdf
+
+    pdf = make_pdf(tmp_path / "statement.pdf", MT_STATEMENT)
+    view = tab(window, "Transactions")
+    monkeypatch.setattr("budget_tracker.ui.transactions_view.QFileDialog.getOpenFileName", lambda *_: (str(pdf), ""))
+    monkeypatch.setattr(ImportDialog, "exec", lambda self: (self.accept(), self.result())[1])  # user clicks Import
+    view.import_csv()
+    assert view.proxy.rowCount() == 5
+
+
+def test_import_dialog_shows_which_line_has_the_column_names(window, tmp_path):
+    from test_pdf_import import MT_STATEMENT, make_pdf
+
+    csv_path = Path(__file__).parent / "fixtures" / "checking.csv"  # 4 lines of account details on top
+    dialog = ImportDialog(window, window.services.importer, csv_path, read_rows(csv_path), {})
+    assert dialog.header_line.value() == 5  # found automatically, counted from 1
+    assert dialog.header_found.text() == "Found: Posting Date  ·  Description  ·  Amount  ·  Balance"
+
+    dialog.header_line.setValue(1)  # a wrong pick is obvious from what it finds
+    assert dialog.header_found.text() == "Found: Account Name:  ·  Everyday Checking"
+    dialog.header_line.setValue(5)
+    assert dialog.summary.text().startswith("6 new") and dialog.current_profile().skip_rows == 4  # stored as before
+
+    pdf = make_pdf(tmp_path / "statement.pdf", MT_STATEMENT)
+    from budget_tracker.services.pdf_import import read_statement
+
+    pdf_dialog = ImportDialog(window, window.services.importer, pdf, read_statement(pdf), {})
+    assert pdf_dialog.header_line.isHidden()  # not relevant to PDF statements

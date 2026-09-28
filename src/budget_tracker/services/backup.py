@@ -5,7 +5,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from budget_tracker.db.connection import MIGRATIONS, migrate
+from budget_tracker.db.connection import MIGRATIONS, connect, migrate
 
 
 class BackupError(ValueError):
@@ -46,6 +46,15 @@ class BackupService:
             source.close()
         self.conn.execute("PRAGMA foreign_keys = ON")
         migrate(self.conn)
+
+    def delete_all(self) -> None:
+        """Erase everything: back to exactly what a fresh install has (the default categories only)."""
+        fresh = connect(":memory:")
+        try:
+            fresh.backup(self.conn)  # overwrite this database with a brand-new one
+        finally:
+            fresh.close()
+        self.conn.execute("PRAGMA foreign_keys = ON")
 
     def _refuse_live_file(self, path: Path) -> None:
         live = self.conn.execute("PRAGMA database_list").fetchone()[2]  # "" for an in-memory database
