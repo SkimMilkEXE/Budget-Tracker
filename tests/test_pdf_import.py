@@ -106,3 +106,37 @@ def test_unreadable_pdfs_give_clear_errors(tmp_path):
     make_pdf(tmp_path / "letter.pdf", "Dear customer,\nThank you for banking with us.")
     with pytest.raises(CsvImportError, match="No transactions found"):
         read_statement(tmp_path / "letter.pdf")
+
+
+def test_mt_checking_with_serial_numbers_and_two_balance_columns():
+    # M&T "Account Activity": amount, then daily balance (sometimes blank) and ledger balance
+    text = """Account Activity
+Serial Deposits & Checks & Daily Ledger
+Posting Date Transaction Description Number Other Credits (+) Other Debits (-) Balance Balance
+08/26/2026 Beginning Balance $920.29
+08/28/2026 OCEAN STATE JOB PAYROLL $309.13 $1,229.42 1,229.42
+09/04/2026 OCEAN STATE JOB PAYROLL 297.88 1,527.30 1,527.30
+09/08/2026 WEB XFER TO SAV 15005171137805 250222115 $300.00 1,227.30 1,227.30
+09/18/2026 WEB PMT TO 4170958501573781 261333115 720.51 421.00
+09/18/2026 OCEAN STATE JOB PAYROLL 401.27 822.27 822.27
+Ending Balance: $975.96"""
+    assert rows(text) == [
+        ["2026-08-28", "OCEAN STATE JOB PAYROLL", "309.13"],
+        ["2026-09-04", "OCEAN STATE JOB PAYROLL", "297.88"],
+        ["2026-09-08", "WEB XFER TO SAV 15005171137805 250222115", "-300.00"],
+        ["2026-09-18", "WEB PMT TO 4170958501573781 261333115", "-720.51"],
+        ["2026-09-18", "OCEAN STATE JOB PAYROLL", "401.27"],
+    ]
+
+
+def test_one_cell_per_line_text_is_joined_back_into_rows():
+    # How pypdf reads M&T's table: every cell on its own line, sometimes with "$" split off
+    cells = ["Checks", "Other Debits", "08/26/2026", "Beginning Balance", "$100.00",
+             "08/28/2026", "PAYROLL", "$50.00", "$", "150.00", "150.00",
+             "09/08/2026", "WEB PMT TO 4170958501573781", "261333115", "20.00", "130.00",
+             "-", "Ending Balance:", "$130.00",
+             "M&T PREMIUM SAVINGS", "09/08/2026", "WEB XFER FROM CHK", "20.00", "520.00"]  # 2nd account: ignored
+    assert rows("\n".join(cells)) == [
+        ["2026-08-28", "PAYROLL", "50.00"],
+        ["2026-09-08", "WEB PMT TO 4170958501573781 261333115", "-20.00"],
+    ]

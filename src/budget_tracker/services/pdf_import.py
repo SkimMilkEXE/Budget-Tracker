@@ -18,7 +18,8 @@ from budget_tracker.services.money import parse_cents
 HEADER = ["Date", "Description", "Amount"]
 
 _AMOUNT = r"-?\$?\(?-?\d{1,3}(?:,\d{3})*\.\d{2}\)?-?"  # always with cents: "1,234.56", "(5.00)", "5.00-"
-_TX_LINE = re.compile(rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_AMOUNT})(?:\s+({_AMOUNT}))?\s*$")
+# Date, description, then the amount and up to two balances (M&T: daily balance and ledger balance)
+_TX_LINE = re.compile(rf"^(\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+(.+?)\s+({_AMOUNT}(?:\s+{_AMOUNT}){{0,2}})\s*$")
 _START_BALANCE = re.compile(rf"(beginning|previous|opening|starting) balance.*?({_AMOUNT})\s*$", re.IGNORECASE)
 _FULL_DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})\b")
 _LONG_DATE = re.compile(r"\b([A-Z][a-z]+)\.? (\d{1,2}),? (\d{4})\b")  # "January 31, 2026", "Jan 31, 2026"
@@ -50,6 +51,7 @@ def read_statement(path: Path | str) -> list[list[str]]:
 
 def statement_rows(lines: list[str], today: date | None = None) -> list[list[str]]:
     """Find transaction lines ("01/05  COFFEE SHOP  4.50  1,234.56") in a statement's text."""
+    lines = _join_cells(lines)
     end = _statement_end(lines) or today or date.today()
     rows = [HEADER]
     sign = -1  # until a section heading says otherwise, assume money out (the usual case)
@@ -60,6 +62,8 @@ def statement_rows(lines: list[str], today: date | None = None) -> list[list[str
         line = " ".join(raw.split())
         if not line:
             continue
+        if len(rows) > 1 and line.lower().startswith("ending balance"):
+            break  # end of the first account; statements that bundle savings too list it after
         if m := _START_BALANCE.search(line):
             balance = parse_cents(m.group(2))
             continue
@@ -71,12 +75,14 @@ def statement_rows(lines: list[str], today: date | None = None) -> list[list[str
                 debit = any(w in heading for w in _DEBIT_WORDS)
                 if credit != debit:
                     sign, skipping = (1 if credit else -1), False
-                elif any(w in heading for w in _SKIP_WORDS):
+                elif not credit and any(w in heading for w in _SKIP_WORDS):  # not a column header
                     skipping = True
             continue
         if skipping:
             continue
-        when_text, description, amount_text, balance_text = m.groups()
+        when_text, description, amounts = m.groups()
+        amounts = amounts.split()
+        amount_text, balance_text = amounts[0], (amounts[-1] if len(amounts) > 1 else None)
         description = _SECOND_DATE.sub("", description)
         if not re.search(r"[A-Za-z]", description) or "balance" in description.lower():
             continue  # a daily-balance entry or a summary line, not a transaction
@@ -97,6 +103,31 @@ def statement_rows(lines: list[str], today: date | None = None) -> list[list[str
         if signed:
             rows.append([when.isoformat(), description, _plain(signed)])
     return rows
+
+
+def _join_cells(lines: list[str]) -> list[str]:
+    """Some PDFs come out one table cell per line: "09/04/2026", "PAYROLL", "297.88", ...
+    Glue a lone date and the cells after it back into one row, ending the row at the first
+    non-amount cell after its amounts."""
+    out: list[str] = []
+    row: list[str] | None = None
+    for raw in lines:
+        line = " ".join(raw.split())
+        is_amount = line == "$" or re.fullmatch(_AMOUNT, line) is not None
+        if re.fullmatch(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?", line):
+            if row:
+                out.append(" ".join(row))
+            row = [line]
+        elif row is not None and (is_amount or not any(re.fullmatch(_AMOUNT, c) for c in row)):
+            row.append(line)
+        else:
+            if row:
+                out.append(" ".join(row))
+                row = None
+            out.append(raw)
+    if row:
+        out.append(" ".join(row))
+    return [line.replace("$ ", "$") for line in out]  # a "$" cell split from its amount
 
 
 def _statement_end(lines: list[str]) -> date | None:
