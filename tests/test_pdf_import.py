@@ -131,11 +131,32 @@ Ending Balance: $975.96"""
 
 def test_one_cell_per_line_text_is_joined_back_into_rows():
     # How pypdf reads M&T's table: every cell on its own line, sometimes with "$" split off
-    cells = ["Checks", "Other Debits", "08/26/2026", "Beginning Balance", "$100.00",
-             "08/28/2026", "PAYROLL", "$50.00", "$", "150.00", "150.00",
-             "09/08/2026", "WEB PMT TO 4170958501573781", "261333115", "20.00", "130.00",
-             "-", "Ending Balance:", "$130.00",
-             "M&T PREMIUM SAVINGS", "09/08/2026", "WEB XFER FROM CHK", "20.00", "520.00"]  # 2nd account: ignored
+    cells = [
+        "Checks",
+        "Other Debits",
+        "08/26/2026",
+        "Beginning Balance",
+        "$100.00",
+        "08/28/2026",
+        "PAYROLL",
+        "$50.00",
+        "$",
+        "150.00",
+        "150.00",
+        "09/08/2026",
+        "WEB PMT TO 4170958501573781",
+        "261333115",
+        "20.00",
+        "130.00",
+        "-",
+        "Ending Balance:",
+        "$130.00",
+        "M&T PREMIUM SAVINGS",
+        "09/08/2026",
+        "WEB XFER FROM CHK",
+        "20.00",
+        "520.00",
+    ]  # 2nd account: ignored
     assert rows("\n".join(cells)) == [
         ["2026-08-28", "PAYROLL", "50.00"],
         ["2026-09-08", "WEB PMT TO 4170958501573781 261333115", "-20.00"],
