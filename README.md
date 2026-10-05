@@ -1,95 +1,95 @@
-# SkimWise
+<p align="center">
+  <img src="src/budget_tracker/assets/budget-icon.png" width="96" alt="SkimWise icon">
+</p>
 
-*Skim the fat off your spending.*
+<h1 align="center">SkimWise</h1>
 
-SkimWise is a private, local-only desktop budget app. Import the CSV or PDF statement from your bank, let rules sort
-every transaction into a category, set monthly budgets, spot the subscriptions you forgot about, and see
-where your money goes. No accounts, no cloud, no tracking: your data never leaves your PC.
+<p align="center">
+  Skim the fat off your spending. A private, local-only budget app for Windows.<br>
+  Part of the <a href="https://skimmilkexe.dev/software">SkimMilk.EXE</a> app family.
+</p>
 
-![Charts in dark mode](docs/screenshots/charts-dark.png)
-
-## Download
-
-Grab **`SkimWise.exe`** from the [latest release](../../releases/latest) and double-click it. There's nothing
-to install. On first launch you can **explore a year of demo data** before importing your own.
-
-> Windows may show "Windows protected your PC" because the app isn't code-signed. Click
-> **More info → Run anyway**.
+<p align="center">
+  <img src="docs/screenshots/charts-dark.png" alt="SkimWise charts: spending by category, monthly spending and income vs expenses">
+</p>
 
 ## Features
 
-- **CSV import that copes with real bank exports.** Map columns once and save them as a *bank profile*,
-  so later imports take one click. It handles preamble lines, debit/credit columns, `$1,234.56`, `(5.00)`,
-  `5.00 DR`, European `1.234,56` and `;`-separated files, dates with times, and Excel's byte-order mark.
-  **Duplicate detection** skips anything you've already imported, so overlapping statements are safe.
-- **PDF bank statements** (text-based, e.g. M&T checking statements): transactions are read from the
-  statement's sections, with years and money in/out worked out for you, then shown in the same preview.
-  Scanned (image-only) PDFs aren't supported; use your bank's CSV export for those.
-- **Rules**: "description contains STARBUCKS → Dining". They run on every import, and categorizing a
-  transaction by hand offers to create one.
-- **Monthly budgets** with progress bars that turn yellow near the limit and red over it.
-- **Charts**: spending by category, the monthly trend, and income vs expenses.
-- **Subscription finder** spots recurring charges (steady timing, similar amount) and totals them per
-  month and per year.
-- **Bulk edits**: select several transactions to categorize or delete them together.
-- **Backup & restore**, **delete all data** for a fresh start, light & dark themes, and your choice of date formats.
+- **Import bank statements** as CSV or PDF. Map the columns once and save them as a *bank profile*, so later imports take one click
+- **Handles messy exports**: account details above the table, separate debit/credit columns, `$1,234.56`, `(5.00)`, `5.00 DR`, European `1.234,56` and `;`-separated files, and dates with times
+- **PDF statements** (text-based, e.g. M&T checking): transactions are read from the statement's sections, with the year and money in/out worked out for you
+- **Duplicate detection**, so importing overlapping statements is safe
+- **Rules** that sort transactions into categories automatically ("description contains STARBUCKS → Dining"), and offer to create themselves when you categorize something by hand
+- **Monthly budgets** with progress bars that turn yellow near the limit and red over it
+- **Charts**: spending by category, the monthly trend, and income vs expenses
+- **Subscription finder**: spots recurring charges and totals them per month and per year
+- **Bulk edits**: select several transactions to categorize or delete them together
+- **Backup and restore**, plus **delete all data** for a fresh start
+- **Demo data** to explore every screen before importing your own
+- Light and dark themes, and your choice of date formats
 
-| Budgets | Subscriptions |
-|---|---|
-| ![Budgets](docs/screenshots/budgets.png) | ![Subscriptions](docs/screenshots/subscriptions.png) |
+<p align="center">
+  <img src="docs/screenshots/budgets.png" alt="Budgets tab with green, yellow and red progress bars">
+</p>
 
-| Transactions | Rules |
-|---|---|
-| ![Transactions](docs/screenshots/transactions.png) | ![Rules](docs/screenshots/rules.png) |
+![Transactions tab with categories, colored amounts and monthly totals](docs/screenshots/transactions.png)
 
-## Privacy
+## Install
 
-Everything is stored in a single SQLite file on your PC (Settings → About shows where). SkimWise makes
-no network connections. Use **Settings → Back up data…** to keep a copy somewhere safe, or
-**Settings → Delete all data…** to wipe everything and start over.
+Download `SkimWise.exe` from the [latest release](https://github.com/SkimMilkEXE/Budget-Tracker/releases/latest), put it anywhere and run it.
+
+Needs Windows 10 or 11 (64-bit). Nothing else to install, because Python and everything else is bundled into the exe. Your data is saved in `%AppData%\SkimWise\budget.db`, and settings like the theme are saved in the registry under `HKEY_CURRENT_USER\Software\SkimWise`.
+
+Windows SmartScreen may warn you because the exe isn't code-signed. Click **More info → Run anyway**.
+
+## Is my data private?
+
+Yes. SkimWise makes no network connections: no accounts, no cloud sync, no tracking and no analytics. Everything stays in one SQLite file on your PC (**Settings → About** shows where).
+
+Because there's no cloud copy, use **Settings → Back up data…** now and then to keep a copy somewhere safe. **Settings → Delete all data…** wipes everything if you want to start over.
+
+## Notes and limits
+
+- **PDF statements need real text.** Statements downloaded from your bank's website work. Scanned paper statements are just pictures of text, so use your bank's CSV export for those.
+- **PDF layouts vary by bank.** Reading is tuned for typical US checking statements (tested with M&T). The import always shows a preview before anything is saved, so check it the first time you import from a new bank.
+- **Long PDF descriptions** that wrap onto a second line keep only the first line.
+- **One budget per category** applies to every month, so changing a limit also changes how past months compare against it.
+- **Windows only** for now. A Linux build may come later.
 
 ## Build from source
 
-Requires Python 3.12+.
+Needs [Python 3.12+](https://www.python.org/downloads/).
 
-```sh
+```powershell
 python -m venv .venv
-.venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
+.venv\Scripts\activate                   # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
-python -m budget_tracker          # run the app
-python -m pytest --cov=budget_tracker
-```
-
-Build the standalone executable (on the platform you're building for):
-
-```sh
+python -m budget_tracker                 # run
+python -m pytest --cov=budget_tracker    # run the tests
 pip install -e ".[build]"
-python scripts/build.py           # -> dist/SkimWise.exe
+python scripts/build.py                  # build the release exe into dist/
 ```
 
-## How it's built
+### Tech
 
-- **Python 3.12**, **PySide6** (Qt) for the UI and **QtCharts** for charts, **SQLite** for storage,
-  **pypdf** for reading PDF statements.
-- Layered so the logic is testable without a UI: `ui/` → `services/` (plain Python, no Qt) → `db/` (all SQL).
-- Money is stored as **integer cents**, never floats. The schema upgrades itself through versioned migrations.
-- **130+ tests** (pytest) cover import parsing, rules, budgets, recurring detection, backup/restore, and
-  headless UI tests that drive the real window. Linted and formatted with **ruff**.
+- Python 3.12 with [PySide6](https://doc.qt.io/qtforpython-6/) (Qt), using a layered design: UI → services → repositories
+- [QtCharts](https://doc.qt.io/qt-6/qtcharts-index.html) for the charts
+- SQLite for storage, with versioned schema migrations that upgrade older databases automatically
+- [pypdf](https://github.com/py-pdf/pypdf) for reading PDF statements
+- Money stored as integer cents, never floats
+- [PyInstaller](https://pyinstaller.org/) for the single-file exe
+- pytest tests for the core logic (CSV and PDF parsing, rules, budgets, recurring detection, backup/restore) plus headless UI tests that drive the real window, linted and formatted with [ruff](https://docs.astral.sh/ruff/)
 
 ```
 src/budget_tracker/
-    main.py        app startup
-    models/        dataclasses: Transaction, Category, Rule, BankProfile, RecurringItem
-    db/            connection, migrations, repositories (all SQL lives here)
-    services/      csv_import, pdf_import, rules, budgets, reports, recurring_detection, backup, demo
-    ui/            main window and one view per tab
-tests/             pytest suite + fake sample CSVs in tests/fixtures/
+  models/     transactions, categories, rules, bank profiles, recurring items
+  db/         database connection, migrations and repositories (all the SQL)
+  services/   csv and pdf import, rules, budgets, reports, recurring detection, backup, demo data
+  ui/         main window, one view per tab, import dialog, settings
+tests/        pytest suite + fake sample statements in tests/fixtures/
+scripts/      build.py for the exe
 ```
 
 ## License
 
-[MIT](LICENSE): free to use, modify and share, with no warranty.
-
----
-
-Built by **SkimMilk.EXE**
+[MIT](LICENSE). Bundled third-party software and its licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
