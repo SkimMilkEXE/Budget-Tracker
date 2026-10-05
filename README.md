@@ -86,6 +86,10 @@ src/budget_tracker/
 tests/             pytest suite + fake sample CSVs in tests/fixtures/
 ```
 
+## License
+
+[MIT](LICENSE): free to use, modify and share, with no warranty.
+
 ---
 
 Built by **SkimMilk.EXE**
